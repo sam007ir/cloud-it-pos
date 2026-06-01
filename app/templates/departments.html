@@ -1,0 +1,172 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Departments{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Inventory Departments</h1>
+    <p class="text-slate-500">Classify and organize your products for better reporting and filtering</p>
+  </div>
+  {% if user.role == 'admin' %}
+  <button onclick="showAddDepartmentModal()" class="px-5 py-2.5 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+    <i class="fa-solid fa-plus"></i> Add Department
+  </button>
+  {% endif %}
+</div>
+
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-6 py-4 text-left">Department Name</th>
+        <th class="px-4 py-4">Description</th>
+        <th class="px-4 py-4 text-center">Products</th>
+        <th class="px-4 py-4 text-right">Actions</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for d in departments %}
+      <tr>
+        <td class="px-6 py-4 font-medium">{{ d.name }}</td>
+        <td class="px-4 py-4 text-slate-600">{{ d.description or '—' }}</td>
+        <td class="px-4 py-4 text-center">
+          <span class="text-xs px-2 py-0.5 bg-slate-100 rounded-full">{{ d.products|length if d.products else 0 }}</span>
+        </td>
+        <td class="px-4 py-4 text-right">
+          {% if user.role == 'admin' %}
+          <button onclick="editDepartment({{ d.id }}, '{{ d.name }}', '{{ d.description or '' }}')" 
+                  class="text-xs px-3 py-1 border rounded-2xl hover:bg-slate-50 mr-1">Edit</button>
+          <button onclick="deleteDepartment({{ d.id }}, '{{ d.name }}')" 
+                  class="text-xs px-3 py-1 border border-red-200 text-red-600 rounded-2xl hover:bg-red-50">Delete</button>
+          {% else %}
+          <span class="text-xs text-slate-400">—</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr>
+        <td colspan="4" class="px-6 py-10 text-center text-slate-400">
+          No departments yet. Create some to better classify your inventory items.
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-4 text-xs text-slate-500">
+  Tip: Use Departments for major categories like "Electronics", "Groceries", "Hardware", "Beverages". You can still use the free-text Category field for sub-categories.
+</div>
+
+<!-- Add / Edit Department Modal -->
+<div id="department-modal" class="hidden fixed inset-0 bg-black/70 z-[140] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden">
+    
+    <!-- Header -->
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div id="dept-modal-title" class="font-semibold text-lg">Add New Department</div>
+      <button onclick="hideDepartmentModal()" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="p-6 space-y-5 text-sm">
+      <input type="hidden" id="dept-id">
+
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Department Name <span class="text-red-500">*</span></label>
+        <input id="dept-name" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Description (optional)</label>
+        <input id="dept-desc" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
+      <button onclick="hideDepartmentModal()" class="flex-1 py-2.5 border rounded-2xl hover:bg-white">Cancel</button>
+      <button onclick="saveDepartment()" class="flex-1 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold">Save Department</button>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentDeptId = null;
+
+function showAddDepartmentModal() {
+  currentDeptId = null;
+  document.getElementById('dept-modal-title').textContent = 'Add New Department';
+  document.getElementById('dept-id').value = '';
+  document.getElementById('dept-name').value = '';
+  document.getElementById('dept-desc').value = '';
+  document.getElementById('department-modal').classList.remove('hidden');
+}
+
+function editDepartment(id, name, description) {
+  currentDeptId = id;
+  document.getElementById('dept-modal-title').textContent = 'Edit Department';
+  document.getElementById('dept-id').value = id;
+  document.getElementById('dept-name').value = name;
+  document.getElementById('dept-desc').value = description;
+  document.getElementById('department-modal').classList.remove('hidden');
+}
+
+function hideDepartmentModal() {
+  document.getElementById('department-modal').classList.add('hidden');
+}
+
+async function saveDepartment() {
+  const name = document.getElementById('dept-name').value.trim();
+  if (!name) {
+    alert("Department name is required");
+    return;
+  }
+
+  const payload = {
+    name: name,
+    description: document.getElementById('dept-desc').value.trim()
+  };
+
+  let url = '/api/departments';
+  let method = 'POST';
+
+  if (currentDeptId) {
+    url = `/api/departments/${currentDeptId}`;
+    method = 'PUT';
+  }
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Department saved');
+    hideDepartmentModal();
+    location.reload();
+  } else {
+    showToast(data.message || 'Error saving department', 'error');
+  }
+}
+
+async function deleteDepartment(id, name) {
+  if (!confirm(`Delete department "${name}"? This cannot be undone if no products are using it.`)) return;
+
+  const res = await fetch(`/api/departments/${id}`, { method: 'DELETE' });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Department deleted');
+    location.reload();
+  } else {
+    showToast(data.message || 'Cannot delete department', 'error');
+  }
+}
+</script>
+{% endblock %}

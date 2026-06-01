@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block title %}Daily Sales Summary{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-3xl font-semibold tracking-tight">Daily Sales Summary</h1>
+  <p class="text-slate-500">Sales by payment method with credit notes netted</p>
+</div>
+
+<form method="get" class="mb-6 flex gap-3 items-end bg-white p-4 rounded-3xl border">
+  <div>
+    <label class="text-xs font-semibold text-slate-500">From Date</label>
+    <input type="date" name="date_from" value="{{ date_from }}" class="border rounded-2xl px-4 py-2 text-sm">
+  </div>
+  <div>
+    <label class="text-xs font-semibold text-slate-500">To Date</label>
+    <input type="date" name="date_to" value="{{ date_to }}" class="border rounded-2xl px-4 py-2 text-sm">
+  </div>
+  <button type="submit" class="px-6 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold">Filter</button>
+  <a href="{{ url_for('daily_sales_summary') }}" class="px-4 py-2 text-sm border rounded-2xl">Clear</a>
+</form>
+
+{% if not sorted_dates %}
+  <div class="bg-white rounded-3xl border p-8 text-center text-slate-400">
+    No sales data found for the selected period.
+  </div>
+{% else %}
+  <div class="space-y-6">
+    {% for date in sorted_dates %}
+    <div class="bg-white rounded-3xl border p-6">
+      <div class="flex justify-between items-center mb-4">
+        <div class="font-semibold text-lg">{{ date }}</div>
+        <div class="text-sm text-slate-500">
+          Gross: <span class="font-medium text-emerald-600">FJD {{ "%.2f"|format( (daily_summary[date]|sum(attribute='1')) ) }}</span>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b">
+              <th class="text-left py-2">Payment Method</th>
+              <th class="text-right py-2">Gross Sales</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y">
+            {% for method in payment_methods %}
+              {% if daily_summary[date].get(method) %}
+              <tr>
+                <td class="py-2 font-medium">{{ method }}</td>
+                <td class="text-right py-2 tabular-nums">FJD {{ "%.2f"|format(daily_summary[date][method]) }}</td>
+              </tr>
+              {% endif %}
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="border-t font-semibold">
+              <td class="py-2">Daily Gross</td>
+              <td class="text-right py-2">FJD {{ "%.2f"|format( daily_summary[date]|sum(attribute='1') ) }}</td>
+            </tr>
+            {% if credit_notes_by_date.get(date) %}
+            <tr class="text-red-600">
+              <td class="py-1">Credit Notes / Returns</td>
+              <td class="text-right py-1 tabular-nums">- FJD {{ "%.2f"|format(credit_notes_by_date[date]) }}</td>
+            </tr>
+            <tr class="font-bold border-t">
+              <td class="py-2">Net Sales for Day</td>
+              <td class="text-right py-2">FJD {{ "%.2f"|format( (daily_summary[date]|sum(attribute='1')) - credit_notes_by_date.get(date, 0) ) }}</td>
+            </tr>
+            {% endif %}
+          </tfoot>
+        </table>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+{% endif %}
+
+<div class="mt-8 text-xs text-slate-400">
+  This report is available to users with the "Daily Sales Summary" permission.
+</div>
+{% endblock %}

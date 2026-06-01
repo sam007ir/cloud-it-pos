@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+
+{% block title %}Receive PO #{{ po.id }}{% endblock %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="flex justify-between items-center mb-6">
+    <div>
+      <h1 class="text-3xl font-semibold tracking-tight">Receive Goods</h1>
+      <p class="text-slate-600">
+        PO #{{ po.id }} • {{ po.supplier.name if po.supplier else 'Unknown Supplier' }} → {{ po.branch.name if po.branch else '' }}
+      </p>
+    </div>
+    <a href="{{ url_for('purchase_orders') }}" class="text-sm text-[#0A4D68] hover:underline">← Back to Purchase Orders</a>
+  </div>
+
+  <div class="bg-white rounded-3xl border p-6">
+    <form id="receive-form" onsubmit="submitReceive(event)">
+      
+      <!-- Header fields -->
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Supplier Invoice Number</label>
+          <input type="text" id="supplier-invoice" class="w-full border rounded-2xl px-4 py-2.5 text-sm" placeholder="INV-12345" required>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Notes / Remarks</label>
+          <input type="text" id="receive-notes" class="w-full border rounded-2xl px-4 py-2.5 text-sm" placeholder="Condition, shortages, etc.">
+        </div>
+      </div>
+
+      <div class="mb-3 font-semibold text-lg">Items to Receive</div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm min-w-[900px]">
+          <thead class="bg-slate-50">
+            <tr>
+              <th class="text-left px-4 py-3 font-medium">Product</th>
+              <th class="px-4 py-3 text-right font-medium">Ordered</th>
+              <th class="px-4 py-3 text-right font-medium">Already Received</th>
+              <th class="px-4 py-3 text-right font-medium text-emerald-700">Remaining</th>
+              <th class="px-4 py-3 text-right font-medium w-28">Receive Now</th>
+              <th class="px-4 py-3 text-right font-medium w-28">Unit Cost</th>
+              <th class="px-4 py-3 text-right font-medium">Line Total</th>
+            </tr>
+          </thead>
+          <tbody id="receive-lines">
+            {% for line in receive_lines %}
+            <tr class="border-b receive-row" 
+                data-product-id="{{ line.product_id }}"
+                data-remaining="{{ line.remaining }}"
+                data-tax-rate="{{ line.tax_rate }}">
+
+              <td class="px-4 py-3 font-medium">{{ line.product_name }}</td>
+              <td class="px-4 py-3 text-right tabular-nums">{{ line.ordered_qty }}</td>
+              <td class="px-4 py-3 text-right tabular-nums text-slate-500">{{ line.already_received }}</td>
+              <td class="px-4 py-3 text-right tabular-nums font-semibold text-emerald-600">
+                {{ line.remaining }}
+              </td>
+
+              <!-- Receive Now -->
+              <td class="px-4 py-3">
+                <input type="number" 
+                       class="receive-qty w-24 border border-emerald-300 focus:border-emerald-500 rounded-xl px-3 py-1.5 text-sm text-right"
+                       value="{{ line.remaining }}" 
+                       min="0" 
+                       max="{{ line.remaining }}"
+                       oninput="updateLineTotal(this)">
+              </td>
+
+              <!-- Cost VEP (Ex Tax) -->
+              <td class="px-4 py-3">
+                <input type="number" step="0.01"
+                       class="receive-vep w-24 border rounded-xl px-3 py-1.5 text-sm text-right"
+                       value="{{ line.cost_price or 0 }}"
+                       oninput="syncVipFromVep(this)">
+              </td>
+
+              <!-- Cost VIP (Inc Tax) -->
+              <td class="px-4 py-3">
+                <input type="number" step="0.01"
+                       class="receive-vip w-24 border rounded-xl px-3 py-1.5 text-sm text-right"
+                       value="{{ line.cost_price or 0 }}"
+                       oninput="syncVepFromVip(this)">
+              </td>
+
+              <td class="px-4 py-3 text-right">
+                <span class="line-total font-semibold tabular-nums">0.00</span>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+          <tfoot>
+            <tr class="font-semibold border-t bg-slate-50">
+              <td colspan="6" class="px-4 py-4 text-right text-base">Running Total:</td>
+              <td class="px-4 py-4 text-right">
+                <span id="running-total" class="text-xl font-bold tabular-nums text-emerald-700">0.00</span>
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      <div class="mt-6 flex justify-between items-center">
+        <button type="button" onclick="receiveAllRemaining()"
+                class="px-5 py-2.5 border border-emerald-600 text-emerald-600 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+          <i class="fa-solid fa-magic"></i>
+          <span>Receive All Remaining</span>
+        </button>
+
+        <div class="flex gap-3">
+          <a href="{{ url_for('purchase_orders') }}" class="px-6 py-2.5 border rounded-2xl text-sm">Cancel</a>
+          <button type="submit" 
+                  class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl flex items-center gap-x-2">
+            <i class="fa-solid fa-check"></i>
+            <span>Confirm Receipt & Update Stock</span>
+          </button>
+        </div>
+      </div>
+
+    </form>
+  </div>
+</div>
+
+<script>
+function getActiveVatRate() {
+  // Deprecated - now we use per-product tax rate from the row
+  return 0.15;
+}
+
+function getRowTaxRate(row) {
+  const rate = parseFloat(row.dataset.taxRate);
+  return isNaN(rate) ? 15 : rate;
+}
+
+function syncVipFromVep(vepInput) {
+  const row = vepInput.closest('.receive-row');
+  const vep = parseFloat(vepInput.value) || 0;
+  const vatRate = getRowTaxRate(row) / 100;
+  const vip = vep * (1 + vatRate);
+
+  const vipInput = row.querySelector('.receive-vip');
+  if (vipInput) vipInput.value = vip.toFixed(2);
+
+  updateLineTotal(vepInput);
+}
+
+function syncVepFromVip(vipInput) {
+  const row = vipInput.closest('.receive-row');
+  const vip = parseFloat(vipInput.value) || 0;
+  const vatRate = getRowTaxRate(row) / 100;
+  const vep = vip / (1 + vatRate);
+
+  const vepInput = row.querySelector('.receive-vep');
+  if (vepInput) vepInput.value = vep.toFixed(2);
+
+  updateLineTotal(vipInput);
+}
+
+function updateLineTotal(input) {
+  const row = input.closest('.receive-row');
+  const qty = parseFloat(row.querySelector('.receive-qty').value) || 0;
+  const vipInput = row.querySelector('.receive-vip');
+  const vip = vipInput ? parseFloat(vipInput.value) || 0 : 0;
+
+  const lineTotal = qty * vip;
+  row.querySelector('.line-total').textContent = lineTotal.toFixed(2);
+  updateRunningTotal();
+}
+
+function updateRunningTotal() {
+  let total = 0;
+  document.querySelectorAll('#receive-lines .receive-row').forEach(row => {
+    const qty = parseFloat(row.querySelector('.receive-qty').value) || 0;
+    const vip = parseFloat(row.querySelector('.receive-vip').value) || 0;
+    total += qty * vip;
+  });
+  document.getElementById('running-total').textContent = total.toFixed(2);
+}
+
+function receiveAllRemaining() {
+  document.querySelectorAll('#receive-lines .receive-row').forEach(row => {
+    const qtyInput = row.querySelector('.receive-qty');
+    const remaining = parseInt(row.dataset.remaining) || 0;
+
+    if (qtyInput) {
+      qtyInput.value = remaining;
+      updateLineTotal(qtyInput);
+    }
+  });
+  updateRunningTotal();
+}
+
+async function submitReceive(e) {
+  e.preventDefault();
+
+  const items = [];
+  let hasError = false;
+
+  document.querySelectorAll('#receive-lines .receive-row').forEach(row => {
+    const productId = parseInt(row.dataset.productId);
+    const qtyInput = row.querySelector('.receive-qty');
+    const qty = parseFloat(qtyInput.value) || 0;
+    const cost = parseFloat(row.querySelector('.receive-cost').value) || 0;
+
+    const remaining = parseInt(row.querySelector('td:nth-child(4)').textContent.trim()) || 0;
+
+    if (qty > remaining) {
+      qtyInput.classList.add('border-red-500');
+      hasError = true;
+    } else {
+      qtyInput.classList.remove('border-red-500');
+    }
+
+    if (qty > 0) {
+      items.push({
+        product_id: productId,
+        received_qty: qty,
+        cost_price: cost
+      });
+    }
+  });
+
+  if (hasError) {
+    alert("One or more lines exceed the remaining quantity to receive.");
+    return;
+  }
+
+  if (items.length === 0) {
+    alert("Please enter at least one quantity to receive.");
+    return;
+  }
+
+  const payload = {
+    supplier_invoice_no: document.getElementById('supplier-invoice').value,
+    notes: document.getElementById('receive-notes').value,
+    items: items
+  };
+
+  const res = await fetch(`/api/purchase-orders/{{ po.id }}/receive`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Goods received and stock updated successfully!');
+    window.location.href = '/purchase-orders';
+  } else {
+    showToast(data.message || 'Failed to record receipt', 'error');
+  }
+}
+
+// Initialize line totals and running total
+document.addEventListener('DOMContentLoaded', () => {
+  document.querySelectorAll('#receive-lines .receive-row').forEach(row => {
+    const qtyInput = row.querySelector('.receive-qty');
+    const costInput = row.querySelector('.receive-cost');
+    
+    if (qtyInput) qtyInput.addEventListener('input', () => updateLineTotal(qtyInput));
+    if (costInput) costInput.addEventListener('input', () => updateLineTotal(costInput));
+    
+    // Initialize
+    if (qtyInput && costInput) {
+      updateLineTotal(qtyInput);
+    }
+  });
+  
+  updateRunningTotal();
+});
+
+function receiveAllRemaining() {
+  document.querySelectorAll('#receive-lines .receive-row').forEach(row => {
+    const qtyInput = row.querySelector('.receive-qty');
+    const remaining = parseInt(row.querySelector('td:nth-child(4)').textContent.trim()) || 0;
+    
+    if (qtyInput) {
+      qtyInput.value = remaining;
+      updateLineTotal(qtyInput);
+    }
+  });
+  updateRunningTotal();
+}
+</script>
+{% endblock %}

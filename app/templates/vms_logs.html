@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+
+{% block title %}VMS Transmission Logs{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-semibold tracking-tight mb-5">FRCS VMS Transmission Logs</h1>
+
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-5 py-3 text-left">Time</th>
+        <th class="px-4 py-3">Invoice</th>
+        <th class="px-4 py-3">Branch</th>
+        <th class="px-4 py-3">Status</th>
+        <th class="px-5 py-3">Response</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y text-xs">
+      {% for log in logs %}
+      <tr>
+        <td class="px-5 py-3 font-mono">{{ log.timestamp.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="px-4 py-3 font-mono">{{ log.invoice_no }}</td>
+        <td class="px-4 py-3">{{ log.branch_id }}</td>
+        <td class="px-4 py-3">
+          {% if log.status == 'SUCCESS' %}
+            <span class="px-2 py-px bg-emerald-100 text-emerald-700 rounded">SUCCESS</span>
+          {% else %}
+            <span class="px-2 py-px bg-red-100 text-red-700 rounded">{{ log.status }}</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-slate-600 max-w-xs truncate">{{ log.response }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="px-5 py-8 text-center text-slate-400">No VMS logs yet. Complete a sale in the POS to generate logs.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

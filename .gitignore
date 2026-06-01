@@ -1,0 +1,45 @@
+﻿# Python
+__pycache__/
+*.py[cod]
+*.class
+
+# Virtual environments
+venv/
+env/
+.venv/
+
+# Environment variables
+.env
+*.env
+
+# Database
+instance/*.db
+*.sqlite3
+
+# IDE / Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated
+.DS_Store
+Thumbs.db
+
+# Certificates / Secrets (very important for your PFX files)
+certs/
+*.pfx
+*.p12
+*.key
+
+# Logs
+*.log
+
+# Build / Dist
+build/
+dist/
+*.egg-info/
+
+# Backup files
+*.bak
+*~

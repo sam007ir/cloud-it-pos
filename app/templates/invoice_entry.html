@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}Manual Invoice Entry{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl">
+  <h1 class="text-3xl font-semibold tracking-tight mb-6">Manual Invoice Entry</h1>
+
+  <div class="bg-white rounded-3xl border p-6">
+    <form id="invoice-form" onsubmit="submitInvoice(event)">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Branch *</label>
+          <select id="inv-branch" required class="w-full border rounded-2xl px-4 py-2 text-sm">
+            {% for b in branches %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Customer / Debtor</label>
+          <select id="inv-debtor" class="w-full border rounded-2xl px-4 py-2 text-sm" onchange="selectInvoiceDebtor(this)">
+            <option value="">Cash / Walk-in</option>
+            {% for d in debtors %}
+            <option value="{{ d.id }}" data-name="{{ d.name }}" data-tin="{{ d.tin or '' }}" data-balance="{{ d.outstanding_balance }}">
+              {{ d.name }} (Bal: FJD {{ "%.2f"|format(d.outstanding_balance) }})
+            </option>
+            {% endfor %}
+          </select>
+          <!-- Live debtor balance + details panel (advanced) -->
+          <div id="inv-debtor-info" class="hidden mt-1.5 text-xs bg-blue-50 border border-blue-200 rounded-2xl px-3 py-1.5">
+            <div><strong>Debtor:</strong> <span id="inv-debtor-name"></span></div>
+            <div><strong>Balance:</strong> <span id="inv-debtor-balance" class="font-semibold"></span></div>
+            <div id="inv-debtor-extra" class="text-[10px] text-slate-600 mt-0.5"></div>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Payment Method</label>
+          <select id="inv-payment" class="w-full border rounded-2xl px-4 py-2 text-sm">
+            {% for pm in payment_methods %}
+            <option value="{{ pm.code }}">{{ pm.name }}</option>
+            {% endfor %}
+            <option value="ON_ACCOUNT">On Account (Debtor)</option>
+          </select>
+        </div>
+      </div>
+
+      <!-- Customer override fields (advanced) -->
+      <div class="grid grid-cols-2 gap-3 mb-4">
+        <input id="inv-customer-name" placeholder="Override customer name (optional)" class="border rounded-2xl px-3 py-1.5 text-sm">
+        <input id="inv-customer-tin" placeholder="Override TIN (B2B)" class="border rounded-2xl px-3 py-1.5 text-sm font-mono">
+      </div>
+
+      <!-- Tax & Compliance info (advanced) -->
+      <div class="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs">
+        <div class="font-semibold text-emerald-700 mb-1">Tax &amp; Fiscal Settings (from Settings)</div>
+        {% if active_tax_rates %}
+          <div>Active rates: {% for r in active_tax_rates %}<span class="font-mono">{{ r.label }}@{{ r.rate }}% </span>{% endfor %}</div>
+        {% else %}
+          <div>Using default 15% (configure Tax Rates in Settings for FRCS V2/V3 compliance)</div>
+        {% endif %}
+        <label class="inline-flex items-center mt-1 cursor-pointer">
+          <input type="checkbox" id="inv-fiscalize" checked class="mr-1.5">
+          <span class="text-emerald-700">Fiscalize with FRCS VMS (recommended for all manual invoices)</span>
+        </label>
+      </div>
+
+      <div class="mb-1 text-xs text-amber-600 flex items-center gap-1">
+        <i class="fa-solid fa-exclamation-triangle"></i>
+        <span>Stock will be deducted immediately on posting. All movements are audited.</span>
+      </div>
+
+      <div class="mb-4">
+        <label class="text-sm font-semibold">Add Items</label>
+        <div class="flex gap-2 mt-1">
+          <select id="inv-product" class="flex-1 border rounded-2xl px-4 py-2 text-sm">
+            {% for p in products %}
+            <option value="{{ p.id }}" data-price="{{ p.price }}" data-name="{{ p.name }}">
+              {{ p.name }} ({{ p.sku }})
+            </option>
+            {% endfor %}
+          </select>
+          <input type="number" id="inv-qty" value="1" class="w-20 border rounded-2xl px-3 py-2 text-sm">
+          <button type="button" onclick="addInvoiceItem()" class="px-5 bg-[#0A4D68] text-white rounded-2xl text-sm">Add</button>
+        </div>
+      </div>
+
+      <table class="w-full text-sm mb-6">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="text-left px-4 py-2">Item</th>
+            <th class="px-4 py-2 text-right w-20">Qty</th>
+            <th class="px-4 py-2 text-right w-24">Unit Price</th>
+            <th class="px-4 py-2 text-right">Total</th>
+            <th class="px-2 py-2"></th>
+          </tr>
+        </thead>
+        <tbody id="inv-items"></tbody>
+        <tfoot>
+          <tr class="font-semibold border-t">
+            <td colspan="3" class="px-4 py-3 text-right">Subtotal</td>
+            <td class="px-4 py-3 text-right" id="inv-subtotal">FJD 0.00</td>
+            <td></td>
+          </tr>
+          <tr class="font-semibold">
+            <td colspan="3" class="px-4 py-3 text-right">VAT / Tax</td>
+            <td class="px-4 py-3 text-right" id="inv-vat">FJD 0.00</td>
+            <td></td>
+          </tr>
+          <tr class="font-bold text-lg border-t">
+            <td colspan="3" class="px-4 py-3 text-right">TOTAL</td>
+            <td class="px-4 py-3 text-right" id="inv-total">FJD 0.00</td>
+            <td></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <button type="submit" class="w-full py-3 bg-emerald-600 text-white font-semibold rounded-2xl">
+        Save Invoice &amp; Update Stock
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+let invItems = [];
+
+function addInvoiceItem() {
+  const select = document.getElementById('inv-product');
+  const qty = parseFloat(document.getElementById('inv-qty').value) || 1;
+  const opt = select.options[select.selectedIndex];
+
+  const productId = parseInt(opt.value);
+  const name = opt.dataset.name;
+  const price = parseFloat(opt.dataset.price);
+
+  // Check if already exists
+  const existing = invItems.findIndex(i => i.product_id === productId);
+  if (existing >= 0) {
+    invItems[existing].qty += qty;
+  } else {
+    invItems.push({ product_id: productId, name, price, qty });
+  }
+
+  renderInvoiceItems();
+}
+
+function renderInvoiceItems() {
+  const tbody = document.getElementById('inv-items');
+  tbody.innerHTML = '';
+  let subtotal = 0;
+
+  invItems.forEach((item, idx) => {
+    const lineTotal = item.price * item.qty;
+    subtotal += lineTotal;
+
+    const tr = document.createElement('tr');
+    tr.className = 'border-b';
+    tr.innerHTML = `
+      <td class="px-4 py-2">${item.name}</td>
+      <td class="px-4 py-2">
+        <input type="number" value="${item.qty}" class="w-16 border rounded px-2 py-0.5 text-sm text-right"
+               onchange="updateInvQty(${idx}, this.value)">
+      </td>
+      <td class="px-4 py-2 text-right">
+        <input type="number" step="0.01" value="${item.price}" class="w-20 border rounded px-2 py-0.5 text-sm text-right"
+               onchange="updateInvPrice(${idx}, this.value)">
+      </td>
+      <td class="px-4 py-2 text-right font-semibold">FJD ${lineTotal.toFixed(2)}</td>
+      <td class="px-2 py-2 text-right">
+        <button onclick="removeInvItem(${idx})" class="text-red-500 text-xs">×</button>
+      </td>
+    `;
+    tbody.appendChild(tr);
+  });
+
+  // Approximate for live UI. Backend uses exact per-product tax rate.
+  const vat = subtotal * 0.15;
+  const total = subtotal + vat;
+
+  document.getElementById('inv-subtotal').textContent = `FJD ${subtotal.toFixed(2)}`;
+  document.getElementById('inv-vat').textContent = `FJD ${vat.toFixed(2)}`;
+  document.getElementById('inv-total').textContent = `FJD ${total.toFixed(2)}`;
+}
+
+function updateInvQty(idx, newQty) {
+  invItems[idx].qty = parseFloat(newQty) || 1;
+  renderInvoiceItems();
+}
+
+function updateInvPrice(idx, newPrice) {
+  invItems[idx].price = parseFloat(newPrice) || 0;
+  renderInvoiceItems();
+}
+
+function removeInvItem(idx) {
+  invItems.splice(idx, 1);
+  renderInvoiceItems();
+}
+
+function selectInvoiceDebtor(select) {
+  const infoBox = document.getElementById('inv-debtor-info');
+  if (!select.value) {
+    infoBox.classList.add('hidden');
+    return;
+  }
+
+  const opt = select.options[select.selectedIndex];
+  const fbBal = parseFloat(opt.dataset.balance) || 0;
+  const name = opt.dataset.name || '';
+
+  document.getElementById('inv-debtor-name').textContent = name;
+  document.getElementById('inv-debtor-balance').textContent = `FJD ${fbBal.toFixed(2)} (loading...)`;
+  document.getElementById('inv-debtor-extra').textContent = '';
+  infoBox.classList.remove('hidden');
+
+  fetch(`/api/debtor/${select.value}/balance`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        document.getElementById('inv-debtor-name').textContent = d.name;
+        document.getElementById('inv-debtor-balance').innerHTML = `FJD ${d.outstanding_balance.toFixed(2)} <span class="text-[10px]">(live)</span>`;
+        let extra = [];
+        if (d.tin) extra.push('TIN: ' + d.tin);
+        if (d.phone) extra.push('Ph: ' + d.phone);
+        if (d.address) extra.push(d.address.substring(0, 40));
+        document.getElementById('inv-debtor-extra').textContent = extra.join(' • ');
+      }
+    })
+    .catch(() => {
+      document.getElementById('inv-debtor-balance').textContent = `FJD ${fbBal.toFixed(2)}`;
+    });
+}
+
+async function submitInvoice(e) {
+  e.preventDefault();
+
+  if (invItems.length === 0) {
+    alert("Please add at least one item.");
+    return;
+  }
+
+  const debtorSelect = document.getElementById('inv-debtor');
+  const payload = {
+    branch_id: parseInt(document.getElementById('inv-branch').value),
+    items: invItems.map(i => ({
+      product_id: i.product_id,
+      quantity: i.qty,
+      price: i.price
+    })),
+    debtor_id: debtorSelect && debtorSelect.value ? parseInt(debtorSelect.value) : null,
+    payment_method: document.getElementById('inv-payment').value,
+    customer_name: document.getElementById('inv-customer-name').value || '',
+    customer_tin: document.getElementById('inv-customer-tin').value || '',
+    fiscalize: document.getElementById('inv-fiscalize').checked
+  };
+
+  const res = await fetch('/api/invoice-entry', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Invoice saved • Stock & movements updated' + (data.fiscalized ? ' • Fiscalized' : ''));
+    window.location.href = '/sales/' + data.order_id;
+  } else {
+    showToast(data.message || 'Failed to save invoice', 'error');
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,775 @@
+{% extends "base.html" %}
+
+{% block title %}Inventory Management{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Inventory Management</h1>
+    <p class="text-slate-500">Multi-branch stock control • Real-time updates</p>
+  </div>
+  {% if user.role == 'admin' %}
+  <div class="flex gap-2">
+    <button onclick="showImportExcelModal()" class="px-4 py-2.5 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+      <i class="fa-solid fa-file-excel"></i> Import Excel
+    </button>
+    <button onclick="showAddProductModal()" class="px-5 py-2.5 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+      <i class="fa-solid fa-plus"></i> Add New Product
+    </button>
+  </div>
+  {% endif %}
+</div>
+
+<!-- Low Stock Alerts -->
+{% if low_stock %}
+<div class="bg-amber-50 border border-amber-200 rounded-3xl p-4 mb-6">
+  <div class="font-semibold text-amber-700 mb-2">Low Stock Alerts</div>
+  <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+    {% for alert in low_stock %}
+    <div class="bg-white px-3 py-1.5 rounded-2xl">{{ alert.product }} @ {{ alert.branch }} — <strong>{{ alert.current }}</strong> left (reorder {{ alert.reorder }})</div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<div class="bg-white rounded-3xl border overflow-x-auto">
+  <table class="w-full text-sm">
+    <thead>
+      <tr class="bg-slate-50">
+        <th class="text-left px-6 py-4 font-medium">Product</th>
+        <th class="px-4 py-4 font-medium">SKU / Barcode</th>
+        <th class="px-4 py-4 font-medium">Tax Rate</th>
+        {% for b in branches %}
+        <th class="px-3 py-4 text-center font-medium">{{ b.name.split()[0] }}</th>
+        {% endfor %}
+        <th class="px-4 py-4"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for row in inventory_data %}
+      <tr>
+        <td class="px-6 py-3 font-medium">{{ row.product.name }}</td>
+        <td class="px-4 py-3 font-mono text-xs text-slate-500">
+          {{ row.product.sku or '—' }}<br>
+          <span class="text-emerald-600">{{ row.product.barcode or 'No barcode' }}</span>
+          {% if row.alt_barcode_count and row.alt_barcode_count > 0 %}
+            <span class="text-[10px] text-blue-500">+{{ row.alt_barcode_count }}</span>
+          {% endif %}
+        </td>
+
+        <td class="px-4 py-3 text-xs">
+          {% if row.product.tax_rate %}
+            <span class="px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full text-[10px]">
+              {{ row.product.tax_rate.label }} ({{ row.product.tax_rate.rate }}%)
+            </span>
+          {% else %}
+            <span class="text-slate-400">Default</span>
+          {% endif %}
+        </td>
+        
+        {% for b in branches %}
+        {% set data = row.branches[b.id] %}
+        <td class="px-3 py-3 text-center text-xs">
+          <div>
+            <span class="font-semibold tabular-nums">FJD {{ "%.2f"|format(data.price) }}</span>
+            {% if data.has_custom_price %}
+              <span class="text-[9px] text-purple-600">(custom)</span>
+            {% endif %}
+          </div>
+          <div class="text-[9px] text-emerald-600">{{ data.on_hand }} on hand</div>
+          {% if data.on_order > 0 %}
+          <div class="text-[9px] text-blue-600">+{{ data.on_order }} on order</div>
+          {% endif %}
+          <div class="mt-1 flex flex-col gap-0.5">
+            <input type="number" value="{{ data.on_hand }}" step="1"
+                   class="w-14 border rounded text-center py-0.5 text-xs"
+                   onchange="adjustStock({{ row.product.id }}, {{ b.id }}, this.value)">
+            <button onclick="setBranchPrice({{ row.product.id }}, {{ b.id }}, {{ data.price }}, {{ data.cost_price or 0 }})" 
+                    class="text-[9px] text-purple-600 hover:underline">Set price</button>
+          </div>
+        </td>
+        {% endfor %}
+
+        <td class="px-4 py-3 text-right">
+          <button onclick="editProduct({{ row.product.id }}, '{{ row.product.name }}', '{{ row.product.sku }}', '{{ row.product.barcode or '' }}', {{ row.product.price }}, '{{ row.product.category }}', {{ row.product.department_id or '' }}, {{ row.product.cost_price }}, {{ row.product.reorder_level }}, '{{ row.product.special_pricing_group or '' }}', {{ row.product.tax_rate_id or '' }})" 
+                  class="text-xs px-3 py-1 border rounded-2xl hover:bg-slate-50 mr-1">Edit</button>
+          <button onclick="showMovementSummary({{ row.product.id }}, '{{ row.product.name }}')" 
+                  class="text-xs px-3 py-1 border rounded-2xl hover:bg-emerald-50 text-emerald-700 mr-1" title="View all stock movements and sales history">History</button>
+          <button onclick="showTransferModal({{ row.product.id }}, '{{ row.product.name }}')" 
+                  class="text-xs px-3 py-1 border rounded-2xl hover:bg-slate-50">Transfer</button>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<div class="mt-4 text-xs text-slate-500">All changes are logged in the Stock Movement audit trail.</div>
+
+<!-- Add / Edit Product Modal -->
+<div id="add-product-modal" class="hidden fixed inset-0 bg-black/70 z-[130] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl overflow-hidden">
+    
+    <!-- Header -->
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div id="product-modal-title" class="font-semibold text-lg">Add New Product</div>
+      <button onclick="hideAddProductModal()" 
+              class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="p-6 space-y-6 text-sm">
+
+      <!-- Basic Information -->
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">BASIC INFORMATION</div>
+        <div class="space-y-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Product Name <span class="text-red-500">*</span></label>
+            <input id="np-name" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          </div>
+
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">SKU (optional)</label>
+              <input id="np-sku" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Barcode <span class="text-red-500">*</span></label>
+              <input id="np-barcode" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Pricing -->
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">PRICING</div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Selling Price (Inc. Tax / VIP - what customer pays) <span class="text-red-500">*</span></label>
+            <input id="np-price" type="number" step="0.01" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Cost Price</label>
+            <input id="np-cost" type="number" step="0.01" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          </div>
+        </div>
+      </div>
+
+      <!-- Classification -->
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">CLASSIFICATION</div>
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Department</label>
+            <div class="flex gap-1">
+              <select id="np-department" class="flex-1 border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+                <option value="">-- No Department --</option>
+                {% for d in departments %}
+                <option value="{{ d.id }}">{{ d.name }}</option>
+                {% endfor %}
+              </select>
+              <button type="button" onclick="quickAddDepartment()" 
+                      class="px-3 border rounded-2xl hover:bg-emerald-50 text-emerald-600 text-lg leading-none flex items-center" 
+                      title="Quick create new department">
+                +
+              </button>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Sub-Category</label>
+            <input id="np-category" placeholder="e.g. Beverages, Snacks" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          </div>
+        </div>
+      </div>
+
+      <!-- Tax Rate (per item) -->
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">TAX RATE (for this item)</div>
+        <select id="np-tax-rate" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+          <option value="">-- Use Default Active Tax Rate --</option>
+          {% for tr in tax_rates %}
+          <option value="{{ tr.id }}">{{ tr.label }} ({{ tr.rate }}%)</option>
+          {% endfor %}
+        </select>
+        <p class="text-[10px] text-slate-400 mt-1">This tax rate will be used for all sales of this product (instead of global default).</p>
+      </div>
+
+      <!-- Other -->
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">OTHER</div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Special Pricing Group</label>
+          <input id="np-special-group" placeholder="e.g. family-combo, 500" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          <div class="text-[10px] text-slate-400 mt-1">Used for bundle/quantity discounts in POS</div>
+        </div>
+      </div>
+
+      <!-- Alternate Barcodes -->
+      <div>
+        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider flex items-center justify-between">
+          <span>ALTERNATE BARCODES (Pack Sizes)</span>
+          <button type="button" onclick="showAlternateBarcodeSection()" 
+                  class="text-emerald-600 text-xs hover:underline">Manage</button>
+        </div>
+        <div id="alternate-barcodes-summary" class="text-xs text-slate-500">
+          Loading...
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Footer -->
+    <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
+      <button onclick="hideAddProductModal()" 
+              class="flex-1 py-2.5 border rounded-2xl hover:bg-white">Cancel</button>
+      <button onclick="createProduct()" id="product-save-btn"
+              class="flex-1 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold">
+        Create Product
+      </button>
+    </div>
+
+  </div>
+</div>
+
+<!-- Alternate Barcodes Management Modal -->
+<div id="alt-barcode-modal" class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl overflow-hidden">
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div>
+        <span class="font-semibold">Alternate Barcodes</span>
+        <span id="alt-barcode-product-name" class="text-sm text-slate-500 ml-2"></span>
+      </div>
+      <button onclick="hideAltBarcodeModal()" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+    </div>
+
+    <div class="p-6">
+      <!-- Add new alternate barcode -->
+      <div class="mb-4 p-3 bg-slate-50 rounded-2xl">
+        <div class="text-xs font-semibold text-slate-600 mb-2">Add New Barcode</div>
+        <div class="flex gap-2">
+          <input id="new-alt-barcode" placeholder="Barcode" class="flex-1 border rounded-2xl px-3 py-2 text-sm">
+          <input id="new-alt-pack-qty" type="number" value="1" min="1" class="w-20 border rounded-2xl px-3 py-2 text-sm text-center" title="Units per scan (e.g. 6 for carton)">
+          <button onclick="addAlternateBarcode()" class="px-4 bg-emerald-600 text-white rounded-2xl text-sm font-semibold">Add</button>
+        </div>
+        <div class="text-[10px] text-slate-500 mt-1">Pack Qty = how many units are added to sale when this barcode is scanned (e.g. 6 for a carton)</div>
+      </div>
+
+      <!-- List of existing alternate barcodes -->
+      <div id="alt-barcodes-list" class="space-y-2 text-sm max-h-64 overflow-auto">
+        <!-- Populated by JS -->
+      </div>
+    </div>
+
+    <div class="px-6 py-4 bg-slate-50 border-t text-right">
+      <button onclick="hideAltBarcodeModal()" class="px-5 py-2 border rounded-2xl text-sm">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Excel Import Modal -->
+<div id="import-excel-modal" class="hidden fixed inset-0 bg-black/70 z-[145] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-lg rounded-3xl p-6">
+    <div class="font-semibold text-lg mb-2">Import Products from Excel</div>
+    <p class="text-sm text-slate-600 mb-4">Upload an .xlsx file. First row should be headers.</p>
+
+    <div class="bg-slate-50 p-3 rounded-2xl text-xs mb-4">
+      <strong>Recommended columns:</strong> SKU, Name, Price, Cost, Department, Category, ReorderLevel, Unit, Barcode<br>
+      <span class="text-emerald-600">Department can be the name (it will be matched or created if admin).</span>
+    </div>
+
+    <input type="file" id="excel-file" accept=".xlsx" class="w-full border rounded-2xl p-3 text-sm mb-4">
+
+    <div class="flex gap-3">
+      <button onclick="hideImportExcelModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+      <button onclick="uploadExcelImport()" class="flex-1 py-2.5 bg-emerald-600 text-white rounded-2xl font-semibold">Import Products</button>
+    </div>
+    <div id="import-status" class="mt-3 text-xs text-center hidden"></div>
+  </div>
+</div>
+
+<!-- Stock Movement Summary Modal (advanced traceability) -->
+<div id="movement-modal" class="hidden fixed inset-0 bg-black/70 z-[140] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-4xl rounded-3xl overflow-hidden">
+    <div class="px-5 py-3 bg-slate-800 text-white flex items-center justify-between">
+      <div>
+        <span class="font-semibold">Stock Movement &amp; Sales History</span>
+        <span id="mov-prod-name" class="ml-2 text-emerald-400"></span>
+      </div>
+      <button onclick="hideMovementModal()" class="text-white/70 hover:text-white">✕</button>
+    </div>
+    <div class="p-4 max-h-[65vh] overflow-auto">
+      <table class="w-full text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="text-left px-3 py-2">Time</th>
+            <th class="px-3 py-2">Type</th>
+            <th class="px-2 py-2 text-right">Δ Qty</th>
+            <th class="px-2 py-2 text-right">After</th>
+            <th class="px-3 py-2">Reference</th>
+            <th class="px-3 py-2">By</th>
+            <th class="px-2 py-2">Notes</th>
+          </tr>
+        </thead>
+        <tbody id="mov-tbody" class="divide-y text-xs"></tbody>
+      </table>
+      <div id="mov-empty" class="hidden text-center py-8 text-slate-400">No movements recorded for this item yet.</div>
+    </div>
+    <div class="p-3 bg-slate-50 text-[11px] text-slate-500 flex justify-between items-center">
+      <div>Every sale, receipt, adjustment, transfer and invoice entry creates an immutable audit row.</div>
+      <button onclick="hideMovementModal()" class="px-4 py-1 border rounded-2xl text-xs">Close</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function adjustStock(productId, branchId, newQty) {
+  const res = await fetch('/api/inventory/adjust', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({product_id: productId, branch_id: branchId, new_quantity: parseInt(newQty), reason: 'Manager adjustment'})
+  });
+  const data = await res.json();
+  if (data.success) {
+    showToast('Stock updated');
+  }
+}
+
+function showTransferModal(productId, productName) {
+  const from = prompt(`Transfer ${productName}\nFrom Branch ID (1=Suva, 2=Nadi, 3=Lautoka):`, "1");
+  const to = prompt("To Branch ID:", "2");
+  const qty = prompt("Quantity:", "10");
+  if (!from || !to || !qty) return;
+
+  fetch('/api/inventory/transfer', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({product_id: productId, from_branch: parseInt(from), to_branch: parseInt(to), quantity: parseInt(qty)})
+  }).then(r => r.json()).then(d => {
+    showToast(d.message || 'Transfer done');
+    location.reload();
+  });
+}
+
+function showAddProductModal() {
+  const modal = document.getElementById('add-product-modal');
+  document.getElementById('product-modal-title').textContent = 'Add New Product';
+  const saveBtn = document.getElementById('product-save-btn');
+  if (saveBtn) {
+    saveBtn.textContent = 'Create Product';
+    saveBtn.onclick = createProduct;
+  }
+  modal.classList.remove('hidden');
+}
+
+function hideAddProductModal() {
+  const modal = document.getElementById('add-product-modal');
+  modal.classList.add('hidden');
+
+  // Reset form to "Add New Product" mode
+  document.getElementById('product-modal-title').textContent = 'Add New Product';
+  const saveBtn = document.getElementById('product-save-btn');
+  if (saveBtn) {
+    saveBtn.textContent = 'Create Product';
+    saveBtn.onclick = createProduct;
+  }
+}
+
+async function createProduct() {
+  const name = document.getElementById('np-name').value.trim();
+  const sku = document.getElementById('np-sku').value.trim();
+  const priceVal = document.getElementById('np-price').value;
+
+  if (!name || !sku) {
+    alert("Name and SKU are required");
+    return;
+  }
+  if (!priceVal || parseFloat(priceVal) <= 0) {
+    alert("Please enter a valid selling price");
+    return;
+  }
+
+  const deptSelect = document.getElementById('np-department');
+  const taxSelect = document.getElementById('np-tax-rate');
+  const payload = {
+    name: name,
+    sku: sku,
+    barcode: document.getElementById('np-barcode').value,
+    price: parseFloat(priceVal),
+    cost_price: parseFloat(document.getElementById('np-cost').value || 0),
+    category: document.getElementById('np-category').value,
+    department_id: deptSelect && deptSelect.value ? parseInt(deptSelect.value) : null,
+    tax_rate_id: taxSelect && taxSelect.value ? parseInt(taxSelect.value) : null,
+    special_pricing_group: document.getElementById('np-special-group').value
+  };
+  const res = await fetch('/api/products', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  const data = await res.json();
+  if (data.success) {
+    showToast('Product created');
+    location.reload();
+  } else {
+    showToast(data.message || 'Failed to create product', 'error');
+  }
+}
+
+async function quickAddDepartment() {
+  const name = prompt("New Department Name:");
+  if (!name || !name.trim()) return;
+
+  const res = await fetch('/api/departments', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ name: name.trim() })
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    // Dynamically add the new department to the select
+    const select = document.getElementById('np-department');
+    if (select) {
+      const option = new Option(data.name, data.id);
+      select.add(option);
+      select.value = data.id;   // auto-select the newly created one
+    }
+    showToast('Department created');
+  } else {
+    showToast(data.message || 'Failed to create department', 'error');
+  }
+}
+
+// ==================== ALTERNATE BARCODES ====================
+let currentAltBarcodeProductId = null;
+
+function showAlternateBarcodeSection() {
+  // This is called from the summary in the main product modal
+  const productId = window.currentEditingProductId; // set when opening edit modal
+  if (!productId) {
+    alert("Please save the product first before managing alternate barcodes.");
+    return;
+  }
+  showAltBarcodeModal(productId);
+}
+
+async function showAltBarcodeModal(productId) {
+  currentAltBarcodeProductId = productId;
+  const modal = document.getElementById('alt-barcode-modal');
+  document.getElementById('alt-barcode-product-name').textContent = '';
+  modal.classList.remove('hidden');
+
+  // Load product name
+  const prodRes = await fetch(`/api/products/${productId}/movements`); // reuse existing endpoint that returns product info
+  // Simpler: we'll just load the list and set name from first item if available
+  await loadAlternateBarcodes();
+}
+
+async function loadAlternateBarcodes() {
+  if (!currentAltBarcodeProductId) return;
+
+  const res = await fetch(`/api/products/${currentAltBarcodeProductId}/barcodes`);
+  const barcodes = await res.json();
+
+  const container = document.getElementById('alt-barcodes-list');
+  container.innerHTML = '';
+
+  if (barcodes.length === 0) {
+    container.innerHTML = '<div class="text-slate-400 text-xs py-2">No alternate barcodes yet.</div>';
+    return;
+  }
+
+  barcodes.forEach(bc => {
+    const div = document.createElement('div');
+    div.className = 'flex justify-between items-center border rounded-2xl px-3 py-2 text-sm';
+    div.innerHTML = `
+      <div>
+        <span class="font-mono">${bc.barcode}</span>
+        <span class="text-xs text-slate-500 ml-2">×${bc.pack_quantity}</span>
+      </div>
+      <button onclick="deleteAlternateBarcode(${bc.id})" class="text-red-500 hover:text-red-700 text-xs">Remove</button>
+    `;
+    container.appendChild(div);
+  });
+}
+
+async function addAlternateBarcode() {
+  const barcode = document.getElementById('new-alt-barcode').value.trim();
+  const packQty = parseInt(document.getElementById('new-alt-pack-qty').value) || 1;
+
+  if (!barcode) {
+    alert("Please enter a barcode");
+    return;
+  }
+
+  const res = await fetch(`/api/products/${currentAltBarcodeProductId}/barcodes`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ barcode, pack_quantity: packQty })
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    document.getElementById('new-alt-barcode').value = '';
+    document.getElementById('new-alt-pack-qty').value = '1';
+    await loadAlternateBarcodes();
+    showToast('Alternate barcode added');
+    // Refresh summary in main modal if open
+    if (typeof loadAlternateBarcodeSummary === 'function') loadAlternateBarcodeSummary();
+  } else {
+    showToast(data.message || 'Failed to add barcode', 'error');
+  }
+}
+
+async function deleteAlternateBarcode(barcodeId) {
+  if (!confirm("Remove this alternate barcode?")) return;
+
+  const res = await fetch(`/api/products/barcodes/${barcodeId}`, { method: 'DELETE' });
+  const data = await res.json();
+
+  if (data.success) {
+    await loadAlternateBarcodes();
+    showToast('Barcode removed');
+  } else {
+    showToast(data.message || 'Failed to remove', 'error');
+  }
+}
+
+function hideAltBarcodeModal() {
+  document.getElementById('alt-barcode-modal').classList.add('hidden');
+  currentAltBarcodeProductId = null;
+  // Refresh the summary in the main product modal
+  if (window.currentEditingProductId) {
+    loadAlternateBarcodeSummary(window.currentEditingProductId);
+  }
+}
+
+async function loadAlternateBarcodeSummary(productId) {
+  const container = document.getElementById('alternate-barcodes-summary');
+  if (!container) return;
+
+  try {
+    const res = await fetch(`/api/products/${productId}/barcodes`);
+    const barcodes = await res.json();
+
+    if (barcodes.length === 0) {
+      container.innerHTML = '<span class="text-slate-400">No alternate barcodes</span>';
+      return;
+    }
+
+    let html = barcodes.map(b => 
+      `<span class="inline-block mr-2 font-mono text-xs bg-slate-100 px-1.5 rounded">${b.barcode}×${b.pack_quantity}</span>`
+    ).join('');
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<span class="text-red-500 text-xs">Failed to load</span>';
+  }
+}
+
+// Helper to set current product id when opening edit
+window.currentEditingProductId = null;
+
+async function setBranchPrice(productId, branchId, currentPrice, currentCost) {
+  const newPrice = prompt("Selling Price for this branch (Inc. Tax / VIP):", currentPrice);
+  if (!newPrice) return;
+  const newCost = prompt("Cost Price for this branch (optional):", currentCost || 0);
+
+  const payload = {
+    product_id: productId,
+    branch_id: branchId,
+    price: parseFloat(newPrice),
+    cost_price: newCost ? parseFloat(newCost) : 0
+  };
+
+  const res = await fetch('/api/branch-price', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.success) {
+    showToast('Branch price updated');
+    location.reload();
+  }
+}
+
+// Edit Product
+function editProduct(id, name, sku, barcode, price, category, departmentId, cost, reorder, specialGroup, taxRateId) {
+  const modal = document.getElementById('add-product-modal');
+  window.currentEditingProductId = id;   // for alternate barcodes
+  
+  // Update title and button text
+  document.getElementById('product-modal-title').textContent = 'Edit Product';
+  const saveBtn = document.getElementById('product-save-btn');
+  if (saveBtn) {
+    saveBtn.textContent = 'Save Changes';
+  }
+
+  // Fill form values
+  document.getElementById('np-name').value = name;
+  document.getElementById('np-sku').value = sku;
+  document.getElementById('np-barcode').value = barcode;
+  document.getElementById('np-price').value = price;
+  document.getElementById('np-cost').value = cost;
+  document.getElementById('np-category').value = category || '';
+  document.getElementById('np-special-group').value = specialGroup || '';
+
+  const deptSelect = document.getElementById('np-department');
+  if (deptSelect) {
+    deptSelect.value = departmentId || '';
+  }
+
+  const taxSelect = document.getElementById('np-tax-rate');
+  if (taxSelect) {
+    taxSelect.value = taxRateId || '';
+  }
+
+  // Load alternate barcodes summary
+  loadAlternateBarcodeSummary(id);
+
+  // Change button behavior for save
+  if (saveBtn) {
+    saveBtn.onclick = async () => {
+      const name = document.getElementById('np-name').value.trim();
+      const sku = document.getElementById('np-sku').value.trim();
+      const priceVal = document.getElementById('np-price').value;
+
+      const barcodeVal = document.getElementById('np-barcode').value.trim();
+      if (!name) {
+        alert("Product Name is required");
+        return;
+      }
+      if (!barcodeVal) {
+        alert("Barcode is required");
+        return;
+      }
+      if (!priceVal || parseFloat(priceVal) <= 0) {
+        alert("Please enter a valid selling price");
+        return;
+      }
+
+      const deptSelect = document.getElementById('np-department');
+      const taxSelect = document.getElementById('np-tax-rate');
+      const payload = {
+        name: name,
+        sku: sku,
+        barcode: document.getElementById('np-barcode').value,
+        price: parseFloat(priceVal),
+        cost_price: parseFloat(document.getElementById('np-cost').value || 0),
+        category: document.getElementById('np-category').value,
+        department_id: deptSelect && deptSelect.value ? parseInt(deptSelect.value) : null,
+        tax_rate_id: taxSelect && taxSelect.value ? parseInt(taxSelect.value) : null
+      };
+      const res = await fetch(`/api/products/${id}`, { 
+        method: 'PUT', 
+        headers: {'Content-Type':'application/json'}, 
+        body: JSON.stringify(payload) 
+      });
+      const data = await res.json();
+      if (data.success) {
+        showToast('Product updated');
+        location.reload();
+      } else {
+        showToast(data.message || 'Failed to update product', 'error');
+      }
+    };
+  }
+
+  modal.classList.remove('hidden');
+}
+
+async function showMovementSummary(productId, productName) {
+  const modal = document.getElementById('movement-modal');
+  document.getElementById('mov-prod-name').textContent = productName;
+  const tbody = document.getElementById('mov-tbody');
+  tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-6 text-center text-slate-400">Loading history...</td></tr>';
+  document.getElementById('mov-empty').classList.add('hidden');
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch(`/api/inventory/item/${productId}/movements`);
+    const data = await res.json();
+    tbody.innerHTML = '';
+
+    if (!data.movements || data.movements.length === 0) {
+      document.getElementById('mov-empty').classList.remove('hidden');
+      return;
+    }
+
+    data.movements.forEach(m => {
+      const sign = m.qty_change > 0 ? '+' : '';
+      const color = m.qty_change >= 0 ? 'text-emerald-600' : 'text-red-600';
+      let refHtml = m.reference;
+      if (m.reference_link) {
+        refHtml = `<a href="${m.reference_link}" class="text-blue-600 hover:underline" target="_blank">${m.reference}</a>`;
+      }
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td class="px-3 py-1.5 font-mono text-[10px]">${m.timestamp}</td>
+        <td class="px-3 py-1.5"><span class="px-1.5 py-0.5 rounded bg-slate-100 text-[10px]">${m.type}</span></td>
+        <td class="px-2 py-1.5 text-right font-semibold tabular-nums ${color}">${sign}${m.qty_change}</td>
+        <td class="px-2 py-1.5 text-right text-slate-500">${m.new_qty}</td>
+        <td class="px-3 py-1.5">${refHtml}</td>
+        <td class="px-3 py-1.5 text-slate-500">${m.performed_by}</td>
+        <td class="px-2 py-1.5 text-[10px] text-slate-500 max-w-[140px] truncate" title="${m.notes || ''}">${m.notes || ''}</td>
+      `;
+      tbody.appendChild(tr);
+    });
+  } catch (e) {
+    tbody.innerHTML = '<tr><td colspan="7" class="px-3 py-4 text-red-500 text-center">Failed to load movement history.</td></tr>';
+  }
+}
+
+function hideMovementModal() {
+  document.getElementById('movement-modal').classList.add('hidden');
+}
+
+function showImportExcelModal() {
+  document.getElementById('import-excel-modal').classList.remove('hidden');
+  document.getElementById('import-status').classList.add('hidden');
+  document.getElementById('excel-file').value = '';
+}
+
+function hideImportExcelModal() {
+  document.getElementById('import-excel-modal').classList.add('hidden');
+}
+
+async function uploadExcelImport() {
+  const fileInput = document.getElementById('excel-file');
+  const statusEl = document.getElementById('import-status');
+  if (!fileInput.files.length) {
+    alert("Please select an Excel file");
+    return;
+  }
+
+  statusEl.textContent = "Uploading and processing...";
+  statusEl.classList.remove('hidden');
+  statusEl.className = "mt-3 text-xs text-center text-emerald-600";
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  try {
+    const res = await fetch('/api/products/import-excel', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      statusEl.textContent = `Success! Imported/updated ${data.imported} products.`;
+      statusEl.className = "mt-3 text-xs text-center text-emerald-600 font-semibold";
+      setTimeout(() => {
+        hideImportExcelModal();
+        location.reload();
+      }, 1600);
+    } else {
+      statusEl.textContent = data.message || "Import failed";
+      statusEl.className = "mt-3 text-xs text-center text-red-600";
+    }
+  } catch (e) {
+    statusEl.textContent = "Upload error. Check file format.";
+    statusEl.className = "mt-3 text-xs text-center text-red-600";
+  }
+}
+</script>
+{% endblock %}

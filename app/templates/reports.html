@@ -1,0 +1,84 @@
+{% extends "base.html" %}
+
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="mb-6 flex justify-between items-end">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Reports</h1>
+    <p class="text-slate-500">Sales analytics and business intelligence</p>
+  </div>
+  <div class="flex gap-2">
+    <a href="{{ url_for('daily_sales_summary') }}" class="px-4 py-2 bg-emerald-600 text-white rounded-2xl text-sm">Daily Sales Summary</a>
+    <a href="{{ url_for('reports', **request.args) }}&export=pdf" class="px-4 py-2 bg-red-600 text-white rounded-2xl text-sm">Export PDF</a>
+    <a href="{{ url_for('reports', **request.args) }}&export=excel" class="px-4 py-2 bg-green-600 text-white rounded-2xl text-sm">Export Excel</a>
+  </div>
+</div>
+
+<form method="get" class="mb-6 flex gap-3 items-end bg-white p-4 rounded-3xl border">
+  <div>
+    <label class="text-xs font-semibold text-slate-500">From Date</label>
+    <input type="date" name="date_from" value="{{ date_from }}" class="border rounded-2xl px-4 py-2 text-sm">
+  </div>
+  <div>
+    <label class="text-xs font-semibold text-slate-500">To Date</label>
+    <input type="date" name="date_to" value="{{ date_to }}" class="border rounded-2xl px-4 py-2 text-sm">
+  </div>
+  <button type="submit" class="px-6 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold">Filter</button>
+  <a href="{{ url_for('reports') }}" class="px-4 py-2 text-sm border rounded-2xl">Clear</a>
+</form>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">TOTAL SALES (Last 500 orders)</div>
+    <div class="text-3xl font-semibold mt-1 tabular-nums">FJD {{ "{:,.2f}".format(total_sales) }}</div>
+  </div>
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">TOTAL VAT COLLECTED</div>
+    <div class="text-3xl font-semibold mt-1 tabular-nums">FJD {{ "{:,.2f}".format(total_vat) }}</div>
+  </div>
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">TRANSACTIONS ANALYZED</div>
+    <div class="text-3xl font-semibold mt-1">{{ orders|length }}</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Sales by Media Type -->
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-4">Sales by Payment Method (Media Type)</div>
+    <div class="space-y-2">
+      {% for method, amount in by_media.items() %}
+      <div class="flex justify-between text-sm border-b pb-1">
+        <span>{{ method }}</span>
+        <span class="font-medium tabular-nums">FJD {{ "%.2f"|format(amount) }}</span>
+      </div>
+      {% else %}
+      <div class="text-slate-400 text-sm">No data</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Sales by Department -->
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-4">Sales by Department / Category</div>
+    <div class="space-y-2">
+      {% for dept, amount in by_dept.items() %}
+      <div class="flex justify-between text-sm border-b pb-1">
+        <span>{{ dept }}</span>
+        <span class="font-medium tabular-nums">FJD {{ "%.2f"|format(amount) }}</span>
+      </div>
+      {% else %}
+      <div class="text-slate-400 text-sm">No data</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<div class="mt-6 bg-white rounded-3xl border p-6">
+  <div class="font-semibold mb-4">Recent Transactions (Sample)</div>
+  <div class="text-xs text-slate-500">For detailed reports, use the Sales page with filters.</div>
+</div>
+{% endblock %}

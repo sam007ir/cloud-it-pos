@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Adjustment{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-semibold mb-6">Stock Adjustment &amp; History</h1>
+
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold text-lg mb-4">Manual Stock Adjustment</div>
+  
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Product</label>
+      <select id="adj-product" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+        {% for p in products %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Branch</label>
+      <select id="adj-branch" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+        {% for b in branches %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">New Quantity</label>
+      <input id="adj-qty" type="number" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Reason</label>
+      <input id="adj-reason" value="Manual count correction" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+    </div>
+  </div>
+
+  <button onclick="doAdjustment()" 
+          class="mt-5 w-full bg-[#0A4D68] hover:bg-[#08374d] text-white py-3 rounded-2xl font-semibold transition">
+    Apply Stock Adjustment
+  </button>
+</div>
+
+<div class="bg-white rounded-3xl border p-6">
+  <div class="font-semibold mb-4">Recent Stock Movements</div>
+  <div class="text-sm space-y-2 max-h-[400px] overflow-auto">
+    {% for m in recent_moves %}
+    <div class="flex justify-between border-b pb-1 text-xs">
+      <div>{{ m.timestamp.strftime('%Y-%m-%d %H:%M') }} — {{ m.movement_type }}</div>
+      <div>{{ m.reference or '' }}</div>
+      <div class="{{ 'text-red-600' if m.quantity_change < 0 else 'text-emerald-600' }}">
+        {{ m.quantity_change }}
+      </div>
+    </div>
+    {% else %}
+    <div class="text-slate-400">No movements yet.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+async function doAdjustment() {
+  const payload = {
+    product_id: parseInt(document.getElementById('adj-product').value),
+    branch_id: parseInt(document.getElementById('adj-branch').value),
+    new_quantity: parseInt(document.getElementById('adj-qty').value),
+    reason: document.getElementById('adj-reason').value
+  };
+  const res = await fetch('/api/inventory/adjust', {
+    method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+  if (data.success) {
+    showToast('Adjustment applied');
+    location.reload();
+  }
+}
+</script>
+{% endblock %}

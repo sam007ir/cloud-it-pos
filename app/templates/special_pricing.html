@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Special Pricing{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Special Pricing Management</h1>
+    <p class="text-slate-500">Create bundles and quantity deals using the Special Pricing Group on products.</p>
+  </div>
+  <button onclick="showRuleModal()" class="px-5 py-2 bg-[#0A4D68] text-white rounded-2xl flex items-center gap-x-2">
+    <i class="fa-solid fa-plus"></i> New Rule
+  </button>
+</div>
+
+<!-- Products with Special Groups -->
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold mb-4">Products in Special Pricing Groups</div>
+  {% if products %}
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 text-sm">
+    {% for p in products %}
+    <div class="border rounded-2xl px-4 py-2">
+      <div class="font-medium">{{ p.name }}</div>
+      <div class="text-xs text-slate-500">{{ p.sku }} 
+        <span class="ml-2 px-2 py-0.5 bg-purple-100 text-purple-700 rounded text-[10px] font-mono">{{ p.special_pricing_group }}</span>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div class="text-slate-400 text-sm">No products have been assigned to a Special Pricing Group yet. Go to Inventory and edit products to assign them.</div>
+  {% endif %}
+</div>
+
+<!-- Rules Table -->
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-5 py-3 text-left">Group</th>
+        <th class="px-4 py-3">Name / Description</th>
+        <th class="px-4 py-3">Type</th>
+        <th class="px-4 py-3 text-right">Min Qty</th>
+        <th class="px-4 py-3 text-right">Special Price</th>
+        <th class="px-5 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for rule in rules %}
+      <tr>
+        <td class="px-5 py-3"><span class="font-mono bg-slate-100 px-2 py-0.5 rounded">{{ rule.group }}</span></td>
+        <td class="px-4 py-3">
+          <div class="font-medium">{{ rule.name or 'Unnamed Rule' }}</div>
+          <div class="text-xs text-slate-500">{{ rule.description or '' }}</div>
+        </td>
+        <td class="px-4 py-3">{{ rule.rule_type }}</td>
+        <td class="px-4 py-3 text-right">{{ rule.min_quantity }}</td>
+        <td class="px-4 py-3 text-right font-semibold">FJD {{ "%.2f"|format(rule.special_price) }}</td>
+        <td class="px-5 py-3 text-right">
+          <button onclick="editRule({{ rule.id }}, '{{ rule.group }}', '{{ rule.name or '' }}', '{{ rule.rule_type }}', {{ rule.min_quantity }}, {{ rule.special_price }}, '{{ rule.description or '' }}')" 
+                  class="text-xs px-3 py-1 border rounded-xl mr-1">Edit</button>
+          <button onclick="deleteRule({{ rule.id }})" class="text-xs px-3 py-1 text-red-600 hover:bg-red-50 rounded-xl">Delete</button>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="px-5 py-8 text-center text-slate-400">No special pricing rules defined yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Rule Modal -->
+<div id="rule-modal" class="hidden fixed inset-0 bg-black/60 z-[150] flex items-center justify-center">
+  <div class="bg-white w-full max-w-md rounded-3xl p-6">
+    <div class="font-semibold text-lg mb-4" id="rule-modal-title">New Special Pricing Rule</div>
+    
+    <form id="rule-form" onsubmit="saveRule(event)">
+      <input type="hidden" id="rule-id">
+      <div class="space-y-3">
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Group ID *</label>
+          <input type="text" id="rule-group" required class="w-full border rounded-2xl px-4 py-2 text-sm" placeholder="e.g. 500 or family-combo">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Specific Branch (optional)</label>
+          <select id="rule-branch" class="w-full border rounded-2xl px-4 py-2 text-sm">
+            <option value="">All Branches</option>
+            {% for b in branches %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Rule Name</label>
+          <input type="text" id="rule-name" class="w-full border rounded-2xl px-4 py-2 text-sm" placeholder="Buy 3 for $10">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Type</label>
+            <select id="rule-type" class="w-full border rounded-2xl px-4 py-2 text-sm">
+              <option value="bundle">Bundle (fixed price)</option>
+              <option value="quantity_discount">Quantity Discount</option>
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Min Quantity</label>
+            <input type="number" id="rule-min-qty" value="1" class="w-full border rounded-2xl px-4 py-2 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Special Price (FJD) *</label>
+          <input type="number" step="0.01" id="rule-price" required class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Description</label>
+          <input type="text" id="rule-desc" class="w-full border rounded-2xl px-4 py-2 text-sm" placeholder="Buy any 3 items in this group for this price">
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="hideRuleModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-semibold">Save Rule</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showRuleModal() {
+  document.getElementById('rule-modal').classList.remove('hidden');
+  document.getElementById('rule-modal-title').textContent = 'New Special Pricing Rule';
+  document.getElementById('rule-form').reset();
+  document.getElementById('rule-id').value = '';
+}
+
+function hideRuleModal() {
+  document.getElementById('rule-modal').classList.add('hidden');
+}
+
+async function saveRule(e) {
+  e.preventDefault();
+  const id = document.getElementById('rule-id').value;
+  const payload = {
+    group: document.getElementById('rule-group').value,
+    name: document.getElementById('rule-name').value,
+    rule_type: document.getElementById('rule-type').value,
+    min_quantity: parseInt(document.getElementById('rule-min-qty').value) || 1,
+    special_price: parseFloat(document.getElementById('rule-price').value),
+    description: document.getElementById('rule-desc').value,
+    branch_id: document.getElementById('rule-branch').value || null
+  };
+
+  let url = '/api/special-pricing-rules';
+  let method = 'POST';
+  if (id) {
+    url = `/api/special-pricing-rules/${id}`;
+    method = 'PUT';
+  }
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Rule saved');
+    location.reload();
+  } else {
+    showToast('Failed to save rule', 'error');
+  }
+}
+
+function editRule(id, group, name, type, minQty, price, desc) {
+  document.getElementById('rule-modal').classList.remove('hidden');
+  document.getElementById('rule-modal-title').textContent = 'Edit Special Pricing Rule';
+  document.getElementById('rule-id').value = id;
+  document.getElementById('rule-group').value = group;
+  document.getElementById('rule-name').value = name;
+  document.getElementById('rule-type').value = type;
+  document.getElementById('rule-min-qty').value = minQty;
+  document.getElementById('rule-price').value = price;
+  document.getElementById('rule-desc').value = desc;
+}
+
+async function deleteRule(id) {
+  if (!confirm('Delete this special pricing rule?')) return;
+  const res = await fetch(`/api/special-pricing-rules/${id}`, { method: 'DELETE' });
+  if (res.ok) location.reload();
+}
+</script>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+
+{% block title %}Stock Take{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-semibold mb-6">Stock Take</h1>
+
+{% if active_take %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="flex justify-between items-center mb-4">
+    <div>
+      <div class="font-semibold text-lg">Active Stock Take - {{ active_take.branch.name }}</div>
+      <div class="text-xs text-slate-500">Started: {{ active_take.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+    </div>
+    <button onclick="completeStockTake({{ active_take.id }})" 
+            class="px-5 py-2 bg-emerald-600 text-white rounded-2xl text-sm font-semibold">
+      Complete Stock Take
+    </button>
+  </div>
+
+  <div class="overflow-x-auto">
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="border-b">
+          <th class="text-left py-2">Product</th>
+          <th class="text-right py-2">System Qty</th>
+          <th class="text-right py-2">Counted Qty</th>
+          <th class="text-right py-2">Variance</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in active_take.items %}
+        <tr class="border-b">
+          <td class="py-1.5">{{ item.product.name }}</td>
+          <td class="text-right py-1.5">{{ item.system_qty }}</td>
+          <td class="text-right py-1.5">
+            <input type="number" value="{{ item.counted_qty }}" 
+                   class="w-20 border rounded px-2 py-1 text-right"
+                   onchange="updateCount({{ item.id }}, this.value)">
+          </td>
+          <td class="text-right py-1.5 {{ 'text-red-600' if item.variance < 0 else 'text-emerald-600' if item.variance > 0 else '' }}">
+            {{ item.variance }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold text-lg mb-4">Start New Stock Take</div>
+  <form onsubmit="startStockTake(event)">
+    <div class="flex gap-3 items-end">
+      <div class="flex-1">
+        <label class="text-xs font-medium text-slate-600">Select Branch</label>
+        <select id="st-branch" required class="w-full border rounded-2xl px-4 py-2.5 text-sm">
+          {% for b in branches %}
+          <option value="{{ b.id }}">{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="px-6 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-semibold">
+        Start Stock Take
+      </button>
+    </div>
+  </form>
+</div>
+{% endif %}
+
+<div class="bg-white rounded-3xl border p-6">
+  <div class="font-semibold mb-4">Recent Stock Takes</div>
+  <div class="text-sm">
+    {% for take in takes %}
+    <div class="flex justify-between border-b py-2">
+      <div>{{ take.branch.name }} — {{ take.created_at.strftime('%Y-%m-%d %H:%M') }}</div>
+      <div class="{{ 'text-emerald-600' if take.status == 'completed' else 'text-amber-600' }}">
+        {{ take.status.title() }}
+      </div>
+    </div>
+    {% else %}
+    <div class="text-slate-400 py-4">No stock takes yet.</div>
+    {% endfor %}
+  </div>
+</div>
+
+<script>
+async function startStockTake(e) {
+  e.preventDefault();
+  const branchId = document.getElementById('st-branch').value;
+  const res = await fetch('/api/stock-take/start', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ branch_id: parseInt(branchId) })
+  });
+  const data = await res.json();
+  if (data.success) {
+    showToast('Stock take started');
+    location.reload();
+  } else {
+    showToast(data.message || 'Failed to start', 'error');
+  }
+}
+
+async function updateCount(itemId, counted) {
+  const res = await fetch(`/api/stock-take-item/${itemId}`, {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ counted_qty: parseInt(counted) || 0 })
+  });
+  const data = await res.json();
+  if (!data.success) {
+    showToast(data.message || 'Update failed', 'error');
+  }
+  // Optionally reload to refresh variance display
+  // location.reload();
+}
+
+async function completeStockTake(stocktakeId) {
+  if (!confirm('Complete this stock take and post all variances?')) return;
+
+  const res = await fetch(`/api/stock-take/${stocktakeId}/complete`, {
+    method: 'POST'
+  });
+  const data = await res.json();
+  if (data.success) {
+    showToast('Stock take completed and variances posted');
+    location.reload();
+  } else {
+    showToast(data.message || 'Failed to complete', 'error');
+  }
+}
+</script>
+{% endblock %}

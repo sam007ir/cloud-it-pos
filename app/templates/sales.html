@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Management{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-semibold tracking-tight mb-1">Sales Management</h1>
+<p class="text-slate-500 mb-6">Complete transaction history with FRCS VMS compliance</p>
+
+<div class="bg-white rounded-3xl p-5 border mb-5">
+  <form method="GET" class="flex flex-wrap items-end gap-3">
+    <div>
+      <label class="text-xs font-medium text-slate-500">Branch</label>
+      <select name="branch_id" class="border rounded-2xl px-4 py-2 text-sm">
+        <option value="">All Branches</option>
+        {% for b in branches %}
+        <option value="{{ b.id }}" {{ 'selected' if selected_branch == b.id else '' }}>{{ b.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div>
+      <label class="text-xs font-medium text-slate-500">Last</label>
+      <select name="days" class="border rounded-2xl px-4 py-2 text-sm">
+        <option value="7" {{ 'selected' if days==7 else '' }}>7 days</option>
+        <option value="30" {{ 'selected' if days==30 else '' }}>30 days</option>
+        <option value="90" {{ 'selected' if days==90 else '' }}>90 days</option>
+      </select>
+    </div>
+    <button type="submit" class="px-6 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold">Filter</button>
+  </form>
+
+  <div class="mt-4 grid grid-cols-3 gap-4 text-sm">
+    <div class="bg-slate-50 p-3 rounded-2xl">Transactions: <strong>{{ total_transactions }}</strong></div>
+    <div class="bg-slate-50 p-3 rounded-2xl">Total Revenue: <strong>FJD {{ "{:,.2f}".format(total_revenue) }}</strong></div>
+    <div class="bg-slate-50 p-3 rounded-2xl">Total VAT Collected: <strong>FJD {{ "{:,.2f}".format(total_vat) }}</strong></div>
+  </div>
+</div>
+
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-5 py-3 text-left">Invoice / Date</th>
+        <th class="px-4 py-3">Customer</th>
+        <th class="px-4 py-3">Branch</th>
+        <th class="px-4 py-3 text-right">Total</th>
+        <th class="px-4 py-3 text-center">VMS Status</th>
+        <th class="px-5 py-3"></th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for sale in sales %}
+      <tr class="hover:bg-slate-50">
+        <td class="px-5 py-3">
+          <div class="font-mono text-xs">#{{ sale.id }}</div>
+          <div class="text-xs text-slate-500">{{ sale.created_at.strftime('%d %b %Y %H:%M') }}</div>
+        </td>
+        <td class="px-4 py-3">{{ sale.customer_name }}</td>
+        <td class="px-4 py-3 text-xs">{{ sale.branch.name if sale.branch else '-' }}</td>
+        <td class="px-4 py-3 text-right font-semibold tabular-nums">FJD {{ "%.2f"|format(sale.total) }}</td>
+        <td class="px-4 py-3 text-center">
+          {% if sale.fiscal_invoice %}
+            <span class="text-xs px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full">Fiscalized</span>
+          {% else %}
+            <span class="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">Pending</span>
+          {% endif %}
+        </td>
+        <td class="px-5 py-3 text-right">
+          <a href="{{ url_for('sale_detail', order_id=sale.id) }}" class="text-xs px-4 py-1 border rounded-2xl">View</a>
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="6" class="px-5 py-10 text-center text-slate-400">No sales found in selected period.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% endblock %}

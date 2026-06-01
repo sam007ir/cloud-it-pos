@@ -1,0 +1,315 @@
+{% extends "base.html" %}
+
+{% block title %}Help &amp; User Guide{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl mx-auto">
+  <div class="mb-8">
+    <h1 class="text-3xl font-semibold tracking-tight">FRCS VMS POS – Complete User Guide</h1>
+    <p class="text-slate-500 mt-1">Practical shop operations, product management, purchasing &amp; FRCS VMS fiscal compliance. Clean workflows modeled on modern retail systems.</p>
+  </div>
+
+  <!-- What's New -->
+  <div class="bg-emerald-50 border border-emerald-200 rounded-3xl p-5 mb-8">
+    <div class="font-semibold text-emerald-700 mb-2">✨ What's New</div>
+    <ul class="text-sm text-emerald-800 grid grid-cols-1 md:grid-cols-2 gap-x-6">
+      <li>• <strong>Reorganized Navigation &amp; Help</strong> — Clear "Products" and "Purchasing" sections (CloudPOS-inspired practical layout)</li>
+      <li>• <strong>Barcode First + Alternate Barcodes</strong> — Barcode compulsory, SKU optional (AUTO- generated). Support pack sizes (e.g. carton of 6)</li>
+      <li>• <strong>VMS Mode Toggle</strong> — Switch between Simulation and Real VSDC (sandbox supported) per branch certificate</li>
+      <li>• <strong>Live Debtor Balance in POS</strong> — Full debtor details captured on every fiscal receipt</li>
+      <li>• <strong>Invoice Entry + Full Stock Audit</strong> — Manual invoices now deduct stock with typed movements</li>
+      <li>• <strong>Per-Item Movement History</strong> — Complete traceability (History button in Inventory)</li>
+      <li>• <strong>Polished Forms Everywhere</strong> — Consistent labeled sections, focus states, better validation</li>
+    </ul>
+  </div>
+
+  <!-- Table of Contents -->
+  <div class="bg-white rounded-3xl border p-6 mb-8">
+    <h2 class="font-semibold mb-4">Table of Contents</h2>
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-x-6 text-sm">
+      <ul class="space-y-1">
+        <li>1. <a href="#getting-started" class="text-blue-600 hover:underline">Getting Started (Fresh Install)</a></li>
+        <li>2. <a href="#shop-management" class="text-blue-600 hover:underline">Shop Management</a></li>
+        <li>3. <a href="#product-management" class="text-blue-600 hover:underline">Product Management</a></li>
+        <li>4. <a href="#purchasing" class="text-blue-600 hover:underline">Purchasing &amp; Suppliers</a></li>
+      </ul>
+      <ul class="space-y-1">
+        <li>5. <a href="#sales-pos" class="text-blue-600 hover:underline">Sales, POS &amp; Debtors</a></li>
+        <li>6. <a href="#stock-control" class="text-blue-600 hover:underline">Stock Control &amp; Adjustments</a></li>
+        <li>7. <a href="#reports" class="text-blue-600 hover:underline">Reports &amp; Insights</a></li>
+        <li>8. <a href="#vms-compliance" class="text-blue-600 hover:underline">VMS Fiscal Compliance</a></li>
+      </ul>
+      <ul class="space-y-1">
+        <li>9. <a href="#backup-restore" class="text-blue-600 hover:underline">Backup, Restore &amp; Maintenance</a></li>
+        <li>10. <a href="#troubleshooting" class="text-blue-600 hover:underline">Troubleshooting &amp; FAQ</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <!-- 1. Getting Started -->
+  <div id="getting-started" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>1. Getting Started – Fresh Install (No Sample Data)</span>
+    </h2>
+    <p class="text-sm mb-3">This is a production system. Every new installation starts completely clean:</p>
+    <ol class="list-decimal list-inside space-y-2 text-sm">
+      <li>Run <code>python run.py</code> from the project folder</li>
+      <li>You are automatically taken to the <strong>Setup Wizard</strong></li>
+      <li>Create your first <strong>Branch</strong> (Name, Address, <strong>TIN</strong>, <strong>VMS UID</strong> — these are mandatory for FRCS VMS fiscalization)</li>
+      <li>Create the first Administrator account</li>
+      <li>Log in → immediately go to <strong>Settings</strong> and <strong>VMS Certificates</strong> to configure the system for your shop</li>
+    </ol>
+    <div class="mt-4 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm">
+      <strong>No demo data is ever loaded.</strong> You build your own products, suppliers, debtors, tax rates and payment methods. This is how real shops start.
+    </div>
+  </div>
+
+  <!-- 2. Shop Management -->
+  <div id="shop-management" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>2. Shop Management</span>
+    </h2>
+    <p class="text-sm text-slate-600 mb-4">Set up your business foundation — branches, compliance, rules, and people. This is the "Shop Management" area (inspired by clean retail systems that treat shop setup as a distinct, critical workflow).</p>
+
+    <div class="space-y-5 text-sm">
+      <div>
+        <div class="font-semibold mb-1">Branches &amp; Multi-Location</div>
+        <p>Go to <a href="{{ url_for('settings') }}" class="text-blue-600 underline">Settings → Branches</a>. Every branch needs its own <strong>TIN</strong> and <strong>VMS UID</strong> from FRCS. The active branch in POS determines which certificate and receipt sequence is used.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">VMS Certificates &amp; Fiscal Mode (Critical)</div>
+        <ol class="list-decimal list-inside space-y-1">
+          <li>Go to <a href="{{ url_for('certificates') }}" class="text-blue-600 underline">VMS Certificates</a> (Admin only)</li>
+          <li>Upload your official FRCS .pfx or .p12 certificate (or use Simulation for testing)</li>
+          <li>For each certificate choose <strong>VMS Mode</strong>:
+            <ul class="ml-6 mt-1 list-disc text-xs">
+              <li><strong>Simulation</strong> — Fast local signing (great for training and testing)</li>
+              <li><strong>Real VSDC</strong> — Live transmission to FRCS. Enter the sandbox URL <code>https://vsdc.sandbox.vms.frcs.org.fj</code> (or production when ready) and your <strong>Receipt Sequence</strong> prefix.</li>
+            </ul>
+          </li>
+          <li>Always click <strong>Test Signing</strong> after upload — it proves the private key works before you process real sales.</li>
+        </ol>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Tax Rates &amp; Payment Methods</div>
+        <p>In <a href="{{ url_for('settings') }}" class="text-blue-600 underline">Settings</a> you fully control these — no hard-coded VAT. Create Standard 15%, Zero-Rated, Exempt, etc. Same for payments (CASH, CARD, MPAISA, ON_ACCOUNT, etc.). These flow into every calculation and every fiscal payload.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Receipt Design (Visual Designer Available)</div>
+        <p><strong>Best option:</strong> Go to <strong>Receipt Designer</strong> (in the top navigation or from Settings). You can:</p>
+        <ul class="list-disc ml-5 text-xs mt-1">
+          <li>See every available field from the database (Order, Branch, Debtor, Fiscal Invoice, etc.)</li>
+          <li>Drag fields with your mouse into Header, Seller, Customer, Items, Totals, Fiscal, or Footer sections</li>
+          <li>Reorder fields inside each section</li>
+          <li>See a live preview while designing</li>
+          <li>Save the layout — it will be used for future receipts</li>
+        </ul>
+        <p class="text-xs mt-1 mt-2">You can still use <strong>Custom Header HTML</strong> in Settings or fully edit <code>app/templates/receipt.html</code> for ultimate control.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Users, Roles &amp; Permissions</div>
+        <p>Create staff with roles (admin, manager, staff). Granular permissions control who can do stock adjustments, issue credit notes, view daily sales summaries, manage debtors, view fiscal logs, etc. Permissions are set per user in Settings → Users.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3. Product Management -->
+  <div id="product-management" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>3. Product Management</span>
+    </h2>
+    <p class="text-sm text-slate-600 mb-4">This is the heart of daily operations — adding products correctly, managing barcodes (including cartons/packs), pricing, and classification. The navigation now has a dedicated <strong>Products</strong> dropdown for these tasks (following practical retail product management flows).</p>
+
+    <div class="space-y-5 text-sm">
+      <div>
+        <div class="font-semibold mb-1">Adding Products – Barcode is King</div>
+        <ul class="list-disc ml-5 space-y-1">
+          <li><strong>Barcode</strong> is now the compulsory field (primary key for scanning).</li>
+          <li>SKU is optional — if left blank the system auto-generates <code>AUTO-{barcode}</code>.</li>
+          <li>Fill Name, Department (recommended), regular Price, Cost, Reorder Level, Unit.</li>
+          <li>Optionally assign a Special Pricing Group for bundle/quantity deals.</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Alternate Barcodes &amp; Pack Quantities (Cartons, Packs, Boxes)</div>
+        <p>In the product edit form (or via the Manage button), add as many alternate barcodes as you need, each with its own <strong>Pack Quantity</strong>.</p>
+        <div class="mt-2 p-3 bg-slate-50 rounded-2xl text-xs font-mono">
+          Example: Main barcode 123456 (single unit)<br>
+          Alternate 789012 with Pack Qty = 6  → scanning 789012 in POS or Invoice Entry automatically adds 6 units.
+        </div>
+        <p class="mt-2 text-xs">This is perfect for cartons, sleeves, or wholesale packs. The movement history correctly records the actual units sold/received.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">No Duplicate Barcodes</div>
+        <p>The system checks both the primary barcode and all alternate barcodes across every product. If you try to use a barcode that already exists you will see a clear popup: <strong>"This barcode is already used by: [Exact Product Name]"</strong>. No silent failures.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Departments &amp; Classification</div>
+        <p>Use <a href="{{ url_for('departments') }}" class="text-blue-600 underline">Departments</a> (under Products dropdown) for structured grouping: Groceries, Beverages, Tobacco, Hardware, etc. Select the department when creating/editing any product. Great for future reporting and filtering.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Pricing Power</div>
+        <ul class="list-disc ml-5 space-y-1">
+          <li>Regular selling price (default for all branches)</li>
+          <li>Branch-specific overrides (click "Set price" on any branch column in Inventory)</li>
+          <li>Special Pricing Rules (create in the Special Pricing page) — quantity or bundle deals that auto-apply in POS with a visible badge. Click any cart item to see exactly which rule fired.</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Bulk Tools</div>
+        <p><strong>Excel Import</strong> (in Inventory): prepare columns SKU, Name, Barcode, Price, Cost, Department, ReorderLevel… and load hundreds of items in one go. Existing items (matched by SKU or Barcode) are updated safely.</p>
+        <p><strong>Bulk Update</strong>: mass change prices, costs, reorder levels, or departments across many products.</p>
+      </div>
+
+      <div>
+        <div class="font-semibold mb-1">Stock Visibility &amp; Traceability</div>
+        <p>Inventory screen shows real-time on-hand per branch + on-order quantities. Every product has a <strong>History</strong> button that opens the complete Stock Movement Summary (every sale, goods receipt, adjustment, transfer, invoice entry, reversal — with before/after quantities, user, date and reference link).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 4. Purchasing & Suppliers -->
+  <div id="purchasing" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>4. Purchasing &amp; Suppliers (Purchase Management)</span>
+    </h2>
+    <p class="text-sm text-slate-600 mb-4">Create supplier orders, receive goods (partial or full), and let stock update automatically with full audit. This matches the "Purchase Management System" concept — tightly connected to your product catalog and inventory.</p>
+
+    <div class="space-y-4 text-sm">
+      <div>
+        <div class="font-semibold">Suppliers</div>
+        <p>Manage supplier records (name, contact, TIN if needed) from the <strong>Purchasing</strong> dropdown.</p>
+      </div>
+      <div>
+        <div class="font-semibold">Purchase Orders</div>
+        <p>Create POs with multiple line items. Enter both <strong>Cost VEP</strong> (ex-tax) and <strong>Cost VIP</strong> (inc-tax) on every line — important for accurate accounting and later variance analysis.</p>
+      </div>
+      <div>
+        <div class="font-semibold">Goods Receipt &amp; Partial Receiving</div>
+        <p>From any PO, click <strong>Receive Goods</strong>. The screen shows exactly what is still remaining. Use "Receive All Remaining" for speed, or enter partial quantities. The system prevents over-receiving. Stock is increased instantly with a <strong>PURCHASE_RECEIPT</strong> movement record.</p>
+        <p class="text-xs mt-1 text-red-600">Administrators can reverse any Goods Receipt — stock is perfectly rolled back with a matching reversal movement.</p>
+      </div>
+      <div>
+        <div class="font-semibold">Stock Take</div>
+        <p>Periodic full counts. Start a stock take → enter actual counted quantities → complete. Variances are recorded as ADJUSTMENT movements.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 5. Sales, POS & Debtors -->
+  <div id="sales-pos" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>5. Sales, POS &amp; Debtors</span>
+    </h2>
+
+    <div class="space-y-4 text-sm">
+      <div>
+        <div class="font-semibold">POS Terminal (Daily Heart of the Business)</div>
+        <ul class="list-disc ml-5 space-y-1">
+          <li>Switch branches instantly at the top of the screen.</li>
+          <li>Search by barcode (primary or any alternate) or product name. Alternate barcodes with pack qty automatically add the correct number of units.</li>
+          <li>Select a <strong>Debtor</strong> → live current balance is fetched and shown in a panel.</li>
+          <li>Special pricing applies automatically. Click any line in the cart to see exactly which rule is active.</li>
+          <li>Multiple payment methods in one sale (split tender supported).</li>
+          <li>Every completed sale is fiscalized. The PDF receipt (80mm or A4) always shows full sales details (items, debtor snapshot, VEP/VIP totals, payment). The full official FRCS fiscal block (SDC No, signature, verification URL) only appears when VMS Real mode is active for the branch.</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="font-semibold">Debtors / On-Account Customers</div>
+        <p>Create and manage customers who buy on credit. When you select them in POS or Invoice Entry their current balance is shown live. The final fiscal receipt captures a full snapshot (name, TIN, phone, address, balance after this sale).</p>
+      </div>
+
+      <div>
+        <div class="font-semibold">Advanced Invoice Entry</div>
+        <p>Found under the <strong>Purchasing</strong> dropdown. Designed for wholesale, manual, or back-office invoicing:</p>
+        <ul class="list-disc ml-5 space-y-1">
+          <li>Dynamic searchable line items</li>
+          <li>Choose debtor (live balance shown)</li>
+          <li>Option to fiscalize the invoice with FRCS VMS</li>
+          <li>Stock is deducted immediately using typed <strong>INVOICE_ENTRY</strong> movements</li>
+          <li>Perfect for credit sales that also update debtor balances</li>
+        </ul>
+      </div>
+
+      <div>
+        <div class="font-semibold">Sales History &amp; Receipts</div>
+        <p>Full list of all sales with filters. Click any sale to see details and regenerate the PDF receipt (with all VMS fiscal data, debtor snapshot, and line items).</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 6. Stock Control -->
+  <div id="stock-control" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>6. Stock Control &amp; Adjustments</span>
+    </h2>
+    <p class="text-sm mb-3">Every single change to stock goes through the central Stock Movement ledger. Nothing is ever updated "silently".</p>
+    <ul class="text-sm list-disc ml-5 space-y-1">
+      <li><strong>Stock Adjustment</strong> (quick link in nav) — increase or decrease with reason. Creates ADJUSTMENT movement.</li>
+      <li><strong>Transfers</strong> — move stock between your branches (two movements created: TRANSFER_OUT + TRANSFER_IN).</li>
+      <li><strong>Stock Take</strong> — full count process with variance adjustments.</li>
+      <li><strong>History button</strong> on every product in Inventory — the single source of truth for that item's life.</li>
+    </ul>
+    <div class="mt-3 text-xs bg-blue-50 p-3 rounded-2xl">Movement types recorded: SALE, INVOICE_ENTRY, PURCHASE_RECEIPT, ADJUSTMENT, STOCKTAKE, TRANSFER_IN/OUT, RECEIPT_REVERSAL, RETURN, etc.</div>
+  </div>
+
+  <!-- 7. Reports -->
+  <div id="reports" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>7. Reports &amp; Business Insights</span>
+    </h2>
+    <p class="text-sm">The Reports page gives you sales, stock, and compliance visibility. There is also a dedicated <strong>Daily Sales Summary</strong> (accessible via top nav or Reports) that shows sales grouped by date and payment method, with credit notes/returns clearly netted.</p>
+    <p class="text-xs mt-2">Access to specific reports is controlled by granular permissions.</p>
+  </div>
+
+  <!-- 8. VMS Compliance -->
+  <div id="vms-compliance" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>8. VMS Fiscal Compliance &amp; Logs</span>
+    </h2>
+    <p class="text-sm mb-3">Every sale (POS or Invoice Entry) that is fiscalized produces a cryptographically signed invoice that is transmitted to FRCS VMS.</p>
+    <ul class="text-sm list-disc ml-5 space-y-1">
+      <li>View transmission status on every sale detail page.</li>
+      <li><strong>VMS Logs</strong> (Admin) — full history of attempts, responses, SDC invoice numbers, QR codes, and error details. Essential for troubleshooting with FRCS.</li>
+      <li>Simulation mode lets you test the entire flow without touching the live VSDC service.</li>
+    </ul>
+  </div>
+
+  <!-- 9. Backup & Restore -->
+  <div id="backup-restore" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>9. Backup, Restore &amp; Maintenance</span>
+    </h2>
+    <p class="text-sm">From <strong>Settings</strong> (Admin) you can create a full database backup at any time and restore from a previous backup file. Use this before major changes or as part of your regular routine.</p>
+  </div>
+
+  <!-- 10. Troubleshooting -->
+  <div id="troubleshooting" class="bg-white rounded-3xl border p-6 mb-6">
+    <h2 class="text-xl font-semibold mb-4 flex items-center gap-x-2 border-b pb-2">
+      <span>10. Troubleshooting &amp; FAQ</span>
+    </h2>
+    <div class="text-sm space-y-4">
+      <div><strong>Q: "I uploaded a PFX but Test Signing fails"</strong><br>Double-check the passphrase. Re-upload with the exact password you used when exporting the PFX from FRCS. Always use the Test Signing button before going live.</div>
+      <div><strong>Q: "Barcode already used" error when it shouldn't be"</strong><br>The check covers both the main barcode field and every alternate barcode on every product. Use the History or search to find the conflicting item.</div>
+      <div><strong>Q: "Stock is wrong after a goods receipt"</strong><br>Check the movement history on the product. You can reverse the receipt (admin only) if it was entered incorrectly.</div>
+      <div><strong>Q: POS is slow or database locked (Windows)</strong><br>Only one instance of the app should run. Use Task Manager → Details → end all python.exe, then restart run.py.</div>
+    </div>
+    <div class="mt-4 text-xs text-slate-500">Still stuck? Check VMS Logs for fiscal errors, or the console output of run.py for Python tracebacks. Most issues are configuration or duplicate data.</div>
+  </div>
+
+  <div class="mt-8 text-center text-xs text-slate-400 border-t pt-4">
+    This guide is always available from the top navigation (Help) or Dashboard.<br>
+    Print or save this page as your shop reference. Revisit after any system update.
+  </div>
+</div>
+{% endblock %}

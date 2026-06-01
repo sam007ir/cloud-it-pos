@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+
+{% block title %}Suppliers{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <h1 class="text-3xl font-semibold tracking-tight">Suppliers</h1>
+  {% if user.role == 'admin' %}
+  <button onclick="showAddSupplier()" class="px-5 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm">+ Add Supplier</button>
+  {% endif %}
+</div>
+
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-6 py-4 text-left">Name</th>
+        <th class="px-4 py-4">Contact</th>
+        <th class="px-4 py-4">Phone / Email</th>
+        <th class="px-4 py-4">Address</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for s in suppliers %}
+      <tr>
+        <td class="px-6 py-4 font-medium">{{ s.name }}</td>
+        <td class="px-4 py-4">{{ s.contact_person or '-' }}</td>
+        <td class="px-4 py-4 text-xs">{{ s.phone or '' }}<br>{{ s.email or '' }}</td>
+        <td class="px-4 py-4 text-xs text-slate-600">{{ s.address or '' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">No suppliers yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Add Supplier Modal -->
+<div id="supplier-modal" class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden">
+    
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div class="font-semibold text-lg">Add New Supplier</div>
+      <button onclick="hideSupplierModal()" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <div class="p-6 space-y-5 text-sm">
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Supplier Name <span class="text-red-500">*</span></label>
+        <input id="sup-name" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Contact Person</label>
+        <input id="sup-contact" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+          <input id="sup-phone" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
+          <input id="sup-email" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+      </div>
+
+      <div>
+        <label class="block text-xs font-medium text-slate-600 mb-1">Address</label>
+        <input id="sup-address" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+      </div>
+    </div>
+
+    <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
+      <button onclick="hideSupplierModal()" class="flex-1 py-2.5 border rounded-2xl hover:bg-white">Cancel</button>
+      <button onclick="saveSupplier()" class="flex-1 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold">Save Supplier</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function showAddSupplier() { document.getElementById('supplier-modal').classList.remove('hidden'); }
+function hideSupplierModal() { document.getElementById('supplier-modal').classList.add('hidden'); }
+
+async function saveSupplier() {
+  const payload = {
+    name: document.getElementById('sup-name').value,
+    contact_person: document.getElementById('sup-contact').value,
+    phone: document.getElementById('sup-phone').value,
+    email: document.getElementById('sup-email').value,
+    address: document.getElementById('sup-address').value
+  };
+  const res = await fetch('/api/suppliers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  const data = await res.json();
+  if (data.success) { location.reload(); } else { alert('Failed'); }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,236 @@
+{% extends "base.html" %}
+
+{% block title %}Purchase Orders{% endblock %}
+
+{% block content %}
+<div class="flex justify-between mb-6">
+  <h1 class="text-3xl font-semibold">Purchase Orders</h1>
+  <button onclick="showPOModal()" class="px-5 py-2 bg-[#0A4D68] text-white rounded-2xl">+ New PO</button>
+</div>
+
+<div class="bg-white rounded-3xl border p-4">
+  <table class="w-full text-sm">
+    <thead><tr class="bg-slate-50"><th class="px-4 py-2">PO #</th><th>Supplier</th><th>Branch</th><th>Progress</th><th>Status</th><th>Total</th><th></th></tr></thead>
+    <tbody>
+      {% for po in pos %}
+      {% set progress = po_progress.get(po.id, {'progress': 0, 'total_received': 0, 'total_ordered': 0}) %}
+      <tr class="border-b hover:bg-slate-50">
+        <td class="px-4 py-2">#{{ po.id }}</td>
+        <td>{{ po.supplier.name if po.supplier else '-' }}</td>
+        <td>{{ po.branch.name if po.branch else '-' }}</td>
+        <td class="px-4 py-2">
+          <a href="{{ url_for('receive_po', po_id=po.id) }}" class="block">
+            <div class="flex items-center gap-2">
+              <div class="w-20 bg-slate-200 rounded-full h-2">
+                <div class="bg-emerald-500 h-2 rounded-full" style="width: {{ progress.progress }}%"></div>
+              </div>
+              <span class="text-xs text-slate-600 tabular-nums">{{ progress.progress }}%</span>
+            </div>
+            <div class="text-[10px] text-slate-500">{{ progress.total_received }} / {{ progress.total_ordered }} received</div>
+          </a>
+        </td>
+        <td>
+          <span class="px-2 py-0.5 text-xs rounded {{ 'bg-emerald-100 text-emerald-700' if po.status == 'received' else 'bg-amber-100' }}">{{ po.status }}</span>
+          {% if progress.is_stale %}
+          <div class="mt-1">
+            <span class="px-2 py-0.5 text-[10px] bg-red-100 text-red-700 rounded-full" title="{{ progress.warning_message }}">
+              ⚠ {{ progress.warning_message }}
+            </span>
+          </div>
+          {% endif %}
+        </td>
+        <td>
+          <div>FJD {{ "%.2f"|format(po.total) }}</div>
+          <div class="text-[10px] text-slate-500">
+            VEP: {{ "%.2f"|format(progress.total_vep) }}<br>
+            VIP: {{ "%.2f"|format(progress.total_vip) }}
+          </div>
+        </td>
+        <td>
+          {% if po.status != 'received' %}
+          <a href="{{ url_for('receive_po', po_id=po.id) }}" class="text-xs px-3 py-1 bg-emerald-600 text-white rounded-xl inline-block">Receive Goods</a>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="text-center py-6 text-slate-400">No purchase orders yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- PO Creation Modal with real line items -->
+<div id="po-modal" class="hidden fixed inset-0 bg-black/60 z-[160] flex items-center justify-center">
+  <div class="bg-white w-full max-w-2xl rounded-3xl p-6">
+    <div class="font-semibold text-lg mb-4">Create Purchase Order</div>
+
+    <div class="grid grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="text-xs font-semibold text-slate-500">Supplier</label>
+        <select id="po-supplier" class="w-full border rounded-2xl px-4 py-2 text-sm">
+          {% for s in suppliers %}<option value="{{ s.id }}">{{ s.name }}</option>{% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-500">Branch</label>
+        <select id="po-branch" class="w-full border rounded-2xl px-4 py-2 text-sm">
+          {% for b in branches %}<option value="{{ b.id }}">{{ b.name }}</option>{% endfor %}
+        </select>
+      </div>
+    </div>
+
+    <div class="mb-2 font-semibold text-sm">Items</div>
+    <div id="po-items-container" class="space-y-2 mb-3"></div>
+    <button onclick="addPOItemRow()" class="text-sm px-3 py-1 border rounded-xl mb-4">+ Add Item</button>
+
+    <div class="flex gap-2">
+      <button onclick="hidePOModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+      <button onclick="savePurchaseOrder()" class="flex-1 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-semibold">Create Purchase Order</button>
+    </div>
+  </div>
+</div>
+
+<script>
+let poItemRows = 0;
+
+function showPOModal() {
+  document.getElementById('po-modal').classList.remove('hidden');
+  document.getElementById('po-items-container').innerHTML = '';
+  poItemRows = 0;
+  addPOItemRow(); // start with one row
+}
+
+function hidePOModal() {
+  document.getElementById('po-modal').classList.add('hidden');
+}
+
+function addPOItemRow() {
+  const container = document.getElementById('po-items-container');
+  const rowId = ++poItemRows;
+  const div = document.createElement('div');
+  div.className = 'flex gap-2 items-center po-item-row';
+  div.innerHTML = `
+    <select class="po-product border rounded-xl px-3 py-2 text-sm flex-1">
+      {% for p in products %}<option value="{{p.id}}" data-tax-rate="{{ p.tax_rate.rate if p.tax_rate else 15 }}">{{p.name}} ({{p.sku}})</option>{% endfor %}
+    </select>
+    <input type="number" value="1" class="po-qty w-16 border rounded-xl px-2 py-1.5 text-sm" placeholder="Qty">
+    <div class="flex gap-1">
+      <input type="number" step="0.01" value="0" class="po-cost-vep w-20 border rounded-xl px-2 py-1.5 text-sm" placeholder="VEP" onchange="syncPOVipFromVep(this)">
+      <input type="number" step="0.01" value="0" class="po-cost-vip w-20 border rounded-xl px-2 py-1.5 text-sm" placeholder="VIP" onchange="syncPOVepFromVip(this)">
+    </div>
+    <button type="button" onclick="this.parentElement.remove()" class="text-red-500 px-2">×</button>
+  `;
+  container.appendChild(div);
+}
+
+async function savePurchaseOrder() {
+  const supplierId = document.getElementById('po-supplier').value;
+  const branchId = document.getElementById('po-branch').value;
+
+  const items = [];
+  document.querySelectorAll('.po-item-row').forEach(row => {
+    const productSelect = row.querySelector('.po-product');
+    const productId = productSelect.value;
+    const qty = parseInt(row.querySelector('.po-qty').value) || 0;
+    const costVep = parseFloat(row.querySelector('.po-cost-vep').value) || 0;
+    const costVip = parseFloat(row.querySelector('.po-cost-vip').value) || 0;
+    if (productId && qty > 0) {
+      items.push({ 
+        product_id: parseInt(productId), 
+        quantity: qty, 
+        cost_vep: costVep, 
+        cost_vip: costVip 
+      });
+    }
+  });
+
+  if (items.length === 0) {
+    alert("Please add at least one item with quantity.");
+    return;
+  }
+
+  const payload = {
+    supplier_id: parseInt(supplierId),
+    branch_id: parseInt(branchId),
+    items: items
+  };
+
+  const res = await fetch('/api/purchase-orders', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Purchase Order created successfully');
+    location.reload();
+  } else {
+    showToast(data.message || 'Failed to create PO', 'error');
+  }
+}
+
+// === RECEIVE GOODS ===
+let currentPOId = null;
+
+async function showReceiveModal(poId) {
+  currentPOId = poId;
+  // In a real app we would fetch PO details. For demo, we use a simple form.
+  const modalHtml = `
+    <div id="receive-modal" class="fixed inset-0 bg-black/60 z-[170] flex items-center justify-center">
+      <div class="bg-white w-full max-w-lg rounded-3xl p-6">
+        <div class="font-semibold text-lg mb-4">Receive Goods for PO #${poId}</div>
+        
+        <div class="mb-3">
+          <label class="text-xs font-semibold text-slate-500">Supplier Invoice Number</label>
+          <input id="supplier-invoice" class="w-full border rounded-2xl px-4 py-2 text-sm" placeholder="INV-12345">
+        </div>
+        
+        <div class="mb-3">
+          <label class="text-xs font-semibold text-slate-500">Notes</label>
+          <input id="receive-notes" class="w-full border rounded-2xl px-4 py-2 text-sm" placeholder="Condition of goods...">
+        </div>
+
+        <div class="text-sm mb-2 font-medium">Enter received quantities (simplified - full lines in next iteration)</div>
+        <input id="received-qty" type="number" value="1" class="w-full border rounded-2xl px-4 py-2 text-sm mb-4" placeholder="Total items received (demo)">
+
+        <div class="flex gap-2">
+          <button onclick="closeReceiveModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+          <button onclick="confirmReceive()" class="flex-1 py-2.5 bg-emerald-600 text-white rounded-2xl font-semibold">Confirm Receipt & Update Stock</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.insertAdjacentHTML('beforeend', modalHtml);
+}
+
+function closeReceiveModal() {
+  const modal = document.getElementById('receive-modal');
+  if (modal) modal.remove();
+}
+
+async function confirmReceive() {
+  const payload = {
+    supplier_invoice_no: document.getElementById('supplier-invoice').value,
+    notes: document.getElementById('receive-notes').value,
+    items: [{ product_id: 1, received_qty: parseInt(document.getElementById('received-qty').value) || 1 }] // Demo - would be dynamic
+  };
+
+  const res = await fetch(`/api/purchase-orders/${currentPOId}/receive`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  closeReceiveModal();
+
+  if (data.success) {
+    showToast('Goods received and stock updated!');
+    location.reload();
+  } else {
+    showToast(data.message || 'Receive failed', 'error');
+  }
+}
+</script>
+{% endblock %}

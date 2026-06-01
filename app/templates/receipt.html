@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Receipt {{ order.id }}</title>
+  <style>
+    /* =============================================
+       FRCS VMS POS - RECEIPT TEMPLATE
+       =============================================
+       YOU HAVE 100% CONTROL HERE.
+
+       How to customize:
+       1. Edit this file directly for full layout/design freedom (recommended for advanced changes).
+       2. Common options (company name, header, footer, logo, show/hide sections) are also controllable from Settings → Receipt Design.
+       3. For 80mm thermal printers: keep this narrow and use small fonts.
+       4. For A4: more space and bigger fonts are used automatically.
+
+       Variables available:
+       - order, order.items, order.branch, order.debtor
+       - fiscal (may be None)
+       - config (ReceiptConfig)
+       - is_real_vms (boolean — only show heavy fiscal block when True)
+    */
+
+    @page {
+      /* 80mm thermal default — WeasyPrint will use this when layout=80mm */
+      size: 80mm 250mm;
+      margin: 3mm 3mm 3mm 3mm;
+    }
+
+    body {
+      font-family: "Segoe UI", Arial, Helvetica, sans-serif;
+      font-size: 9pt;
+      line-height: 1.25;
+      margin: 0;
+      padding: 0;
+      color: #111;
+    }
+
+    .receipt {
+      width: 100%;
+    }
+
+    /* A4 overrides - applied when layout is 'a4' */
+    .layout-a4 {
+      font-size: 10.5pt;
+    }
+    .layout-a4 .header {
+      font-size: 14pt;
+    }
+
+    .header {
+      text-align: center;
+      border-bottom: 1px solid #000;
+      padding-bottom: 4px;
+      margin-bottom: 6px;
+    }
+
+    .header h1 {
+      font-size: 10pt;
+      margin: 0 0 2px 0;
+      font-weight: 700;
+    }
+
+    .company-name {
+      font-weight: 700;
+      font-size: 11pt;
+    }
+
+    .meta {
+      font-size: 8pt;
+      margin: 4px 0;
+    }
+
+    .section {
+      margin: 6px 0 4px 0;
+    }
+
+    .section-title {
+      font-weight: 700;
+      font-size: 8.5pt;
+      border-bottom: 1px dotted #555;
+      padding-bottom: 1px;
+      margin-bottom: 3px;
+    }
+
+    table.items {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8pt;
+    }
+
+    table.items th {
+      text-align: left;
+      border-bottom: 1px solid #000;
+      padding: 2px 0;
+      font-weight: 600;
+    }
+
+    table.items td {
+      padding: 2px 0;
+      vertical-align: top;
+    }
+
+    .text-right { text-align: right; }
+    .text-center { text-align: center; }
+
+    .totals {
+      margin-top: 6px;
+      border-top: 1px solid #000;
+      padding-top: 4px;
+    }
+
+    .totals-row {
+      display: flex;
+      justify-content: space-between;
+      margin: 1px 0;
+    }
+
+    .totals-row.total {
+      font-weight: 700;
+      font-size: 10pt;
+      border-top: 1px solid #000;
+      padding-top: 3px;
+      margin-top: 3px;
+    }
+
+    .fiscal-block {
+      margin-top: 8px;
+      padding-top: 6px;
+      border-top: 2px dashed #000;
+      font-size: 7.5pt;
+    }
+
+    .footer {
+      margin-top: 8px;
+      font-size: 7.5pt;
+      text-align: center;
+      border-top: 1px dotted #555;
+      padding-top: 4px;
+    }
+
+    .logo {
+      max-height: 28mm;
+      max-width: 60mm;
+      display: block;
+      margin: 0 auto 4px auto;
+    }
+
+    .small { font-size: 7.5pt; }
+    .mono { font-family: monospace; }
+
+    @media print {
+      body { -webkit-print-color-adjust: exact; }
+    }
+  </style>
+</head>
+<body class="{% if config.layout == 'a4' %}layout-a4{% endif %}">
+  <div class="receipt">
+
+    <!-- =====================================================
+         ========== TOP HEADER - COMPLETE CONTROL ==========
+         =====================================================
+         You have full freedom here.
+
+         Option 1 (easiest): Go to Settings → Receipt Design and put custom HTML in the new "Custom Header HTML" field.
+         It will be injected right here.
+
+         Option 2 (full power): Edit this file directly. Move, delete, or rewrite any section below.
+         You can completely change the header, logo placement, add your address, phone, slogan, etc.
+    -->
+
+    {% if config.custom_header_html %}
+      {{ config.custom_header_html | safe }}
+    {% else %}
+      <!-- Default header (edit or replace this entire block) -->
+      <div class="header">
+        {% if config.show_logo and config.logo_base64 %}
+          <img src="{{ config.logo_base64 }}" class="logo" alt="Logo">
+        {% endif %}
+
+        <div class="company-name">{{ config.company_name or 'Your Business Name' }}</div>
+
+        {% if config.header_text %}
+          <div class="small">{{ config.header_text }}</div>
+        {% endif %}
+
+        <div style="margin-top: 4px; font-weight: 700; font-size: 9pt;">
+          {% if is_real_vms and fiscal %}
+            OFFICIAL FISCAL RECEIPT — FRCS VMS
+          {% else %}
+            TAX INVOICE / RECEIPT
+          {% endif %}
+        </div>
+      </div>
+    {% endif %}
+
+    <!-- You can freely add more header fields here (address, phone, email, slogan, etc.) -->
+
+    <!-- ============ META INFORMATION ============ -->
+    <div class="meta">
+      <strong>Receipt #{{ order.id }}</strong><br>
+      Date: {{ order.created_at.strftime('%d %b %Y %H:%M') }}<br>
+      {% if order.branch %}
+        Branch: {{ order.branch.name }} (TIN: {{ order.branch.tin or 'N/A' }})<br>
+        VMS UID: {{ order.branch.vms_uid or 'N/A' }}
+      {% endif %}
+    </div>
+
+    <!-- ============ CUSTOMER / DEBTOR ============ -->
+    {% if order.customer_name and order.customer_name|lower not in ['cash customer', 'cash'] %}
+    <div class="section">
+      <div class="section-title">
+        {% if order.debtor_id %}DEBTOR (ON ACCOUNT){% else %}CUSTOMER{% endif %}
+      </div>
+      <div>
+        {{ order.customer_name }}<br>
+        {% if order.customer_tin %}TIN: {{ order.customer_tin }}<br>{% endif %}
+        {% if order.debtor %}
+          {% if order.debtor.phone %}Phone: {{ order.debtor.phone }}<br>{% endif %}
+          {% if order.debtor.address %}Address: {{ order.debtor.address }}<br>{% endif %}
+          {% if order.debtor.outstanding_balance is defined %}
+            Balance after sale: <strong>FJD {{ "%.2f"|format(order.debtor.outstanding_balance or 0) }}</strong>
+          {% endif %}
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    <!-- ============ ITEMS TABLE ============ -->
+    <div class="section">
+      <div class="section-title">ITEMS</div>
+      <table class="items">
+        <thead>
+          <tr>
+            <th style="width: 42%;">Item</th>
+            <th style="width: 10%;" class="text-center">Qty</th>
+            <th style="width: 16%;" class="text-right">Unit (VIP)</th>
+            <th style="width: 12%;" class="text-center">Tax</th>
+            <th style="width: 20%;" class="text-right">Line Total (VIP)</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for item in order.items %}
+          <tr>
+            <td>{{ item.product_name }}</td>
+            <td class="text-center">{{ item.quantity }}</td>
+            <td class="text-right">{{ "%.2f"|format(item.unit_price) }}</td>
+            <td class="text-center">
+              {% set tr = item.product.tax_rate if item.product else None %}
+              {% if tr %}
+                <span style="font-size:7pt; background:#e0f2fe; padding:1px 4px; border-radius:3px;">{{ tr.label }} {{ tr.rate }}%</span>
+              {% else %}
+                <span style="font-size:7pt; color:#888;">Default</span>
+              {% endif %}
+            </td>
+            <td class="text-right">{{ "%.2f"|format(item.line_total) }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- ============ TOTALS ============ -->
+    <div class="totals">
+      <div class="totals-row">
+        <div>Subtotal (VEP)</div>
+        <div>FJD {{ "%.2f"|format(order.subtotal or 0) }}</div>
+      </div>
+
+      {% if config.show_tax_breakdown %}
+        {% if tax_items %}
+          {% for t in tax_items %}
+          <div class="totals-row small">
+            <div>{{ t.label }} @ {{ t.rate }}%</div>
+            <div>FJD {{ "%.2f"|format(t.amount or 0) }}</div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <!-- fallback using live rates or order.vat -->
+          <div class="totals-row small">
+            <div>VAT / Tax</div>
+            <div>FJD {{ "%.2f"|format(order.vat or 0) }}</div>
+          </div>
+        {% endif %}
+      {% endif %}
+
+      <div class="totals-row total">
+        <div>TOTAL (VIP)</div>
+        <div>FJD {{ "%.2f"|format(order.total or 0) }}</div>
+      </div>
+    </div>
+
+    <!-- ============ PAYMENT ============ -->
+    <div class="section small">
+      <strong>Payment:</strong> {{ (order.payment_method or 'CASH')|upper }}
+      {% if order.payment_ref %} (Ref: {{ order.payment_ref }}){% endif %}
+    </div>
+
+    <!-- ============ FOOTER TEXT ============ -->
+    {% if config.footer_text %}
+    <div class="footer">
+      {{ config.footer_text }}
+    </div>
+    {% endif %}
+
+    <!-- ============ FRCS FISCAL BLOCK — ONLY WHEN VMS REAL MODE ============ -->
+    {% if is_real_vms and fiscal %}
+    <div class="fiscal-block">
+      <div style="text-align:center; font-weight:700; margin-bottom:4px; border-bottom:1px solid #000; padding-bottom:2px;">
+        FRCS VMS — OFFICIAL FISCAL INVOICE
+      </div>
+      {% if fiscal.sdc_no %}<div><strong>SDC No:</strong> {{ fiscal.sdc_no }}</div>{% endif %}
+      {% if fiscal.invoice_no %}<div><strong>Invoice No:</strong> {{ fiscal.invoice_no }}</div>{% endif %}
+      {% if fiscal.sdc_time %}<div><strong>Time:</strong> {{ fiscal.sdc_time }}</div>{% endif %}
+      {% if fiscal.signature %}
+        <div class="small"><strong>Signature:</strong> {{ fiscal.signature[:60] }}{% if fiscal.signature|length > 60 %}...{% endif %}</div>
+      {% endif %}
+      {% if fiscal.verification_url %}
+        <div class="small"><strong>Verify online:</strong> {{ fiscal.verification_url }}</div>
+      {% endif %}
+      <div style="margin-top:4px; font-size:7pt; text-align:center;">
+        Cryptographically signed and transmitted to FRCS VMS.
+      </div>
+    </div>
+    {% else %}
+    <div style="margin-top:8px; font-size:7pt; text-align:center; color:#555;">
+      Simulated fiscal receipt — not transmitted to FRCS VMS.
+    </div>
+    {% endif %}
+
+  </div>
+</body>
+</html>

@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}FRCS VMS POS{% endblock %} • Fiji</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+  <style>
+    body { font-family: 'Inter', system-ui, sans-serif; }
+    .nav-active { background-color: #0f172a; color: white; border-radius: 0.75rem; }
+    .fiscal-box { font-family: ui-monospace, monospace; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body class="bg-slate-100">
+  {% if current_user.is_authenticated %}
+  <!-- Top Nav -->
+  <nav class="bg-white border-b sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="flex items-center justify-between h-14">
+        <div class="flex items-center gap-x-3">
+          <div class="flex items-center gap-x-2">
+            <div class="w-8 h-8 bg-[#0A4D68] rounded-xl flex items-center justify-center">
+              <i class="fa-solid fa-receipt text-white"></i>
+            </div>
+            <div class="font-semibold text-xl tracking-tight text-[#0A4D68]">FRCS VMS POS</div>
+          </div>
+          <div class="text-xs px-2.5 py-0.5 bg-emerald-100 text-emerald-700 rounded-full font-medium">LIVE</div>
+        </div>
+
+        <div class="flex items-center gap-x-2 text-sm">
+          <div class="px-3 py-1 bg-slate-100 rounded-2xl text-xs font-medium">
+            {{ current_user.name }} <span class="text-slate-400">• {{ current_user.role.upper() }}</span>
+          </div>
+          <a href="{{ url_for('logout') }}" class="px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 rounded-xl">Logout</a>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Secondary Nav -->
+  <div class="border-b bg-white">
+    <div class="max-w-7xl mx-auto px-6">
+      <div class="flex gap-x-1 text-sm py-2 items-center">
+        <a href="{{ url_for('dashboard') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'dashboard' else '' }}">Dashboard</a>
+        <a href="{{ url_for('pos') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'pos' else '' }}">POS Terminal</a>
+
+        <!-- Products Dropdown (Product Management) -->
+        <div class="relative group">
+          <!-- Parent is NOT a link anymore. Clicking it does nothing (pure menu trigger). -->
+          <div 
+             class="px-4 py-2 rounded-2xl hover:bg-slate-100 flex items-center gap-1 cursor-pointer {{ 'nav-active' if request.endpoint in ['inventory', 'departments', 'special_pricing', 'bulk_update'] else '' }}">
+            Products
+            <span class="text-xs">▾</span>
+          </div>
+          <div class="hidden group-hover:block absolute left-0 mt-1 w-56 bg-white border rounded-2xl shadow-lg py-1 z-50 text-sm pt-1 -mt-1">
+            <a href="{{ url_for('inventory') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'inventory' else '' }}">Inventory Management</a>
+            <a href="{{ url_for('departments') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'departments' else '' }}">Departments</a>
+            <a href="{{ url_for('special_pricing') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'special_pricing' else '' }}">Special Pricing</a>
+            <a href="{{ url_for('bulk_update') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'bulk_update' else '' }}">Bulk Update</a>
+          </div>
+        </div>
+
+        <!-- Purchasing Dropdown -->
+        <div class="relative group">
+          <!-- Parent is NOT a link anymore. Pure menu trigger. -->
+          <div 
+             class="px-4 py-2 rounded-2xl hover:bg-slate-100 flex items-center gap-1 cursor-pointer {{ 'nav-active' if request.endpoint in ['purchase_orders', 'goods_receipts', 'suppliers', 'stock_take', 'invoice_entry'] else '' }}">
+            Purchasing
+            <span class="text-xs">▾</span>
+          </div>
+          <div class="hidden group-hover:block absolute left-0 mt-1 w-56 bg-white border rounded-2xl shadow-lg py-1 z-50 text-sm pt-1 -mt-1">
+            <a href="{{ url_for('purchase_orders') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'purchase_orders' else '' }}">Purchase Orders</a>
+            <a href="{{ url_for('goods_receipts') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'goods_receipts' else '' }}">Goods Receipts</a>
+            <a href="{{ url_for('suppliers') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'suppliers' else '' }}">Suppliers</a>
+            <a href="{{ url_for('stock_take') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'stock_take' else '' }}">Stock Take</a>
+            <a href="{{ url_for('invoice_entry') }}" class="block px-4 py-1.5 hover:bg-slate-100 {{ 'font-semibold text-[#0A4D68]' if request.endpoint == 'invoice_entry' else '' }}">Invoice Entry</a>
+          </div>
+        </div>
+
+        {% if current_user.role == 'admin' or user_has_permission(current_user, 'can_do_stock_adjustment') %}
+        <a href="{{ url_for('stock_adjustment') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'stock_adjustment' else '' }}">Stock Adjustment</a>
+        {% endif %}
+        {% if current_user.role == 'admin' or user_has_permission(current_user, 'can_view_debtors') or user_has_permission(current_user, 'can_manage_debtors') %}
+        <a href="{{ url_for('debtors') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'debtors' else '' }}">Debtors</a>
+        {% endif %}
+        {% if current_user.role == 'admin' or user_has_permission(current_user, 'can_view_sales') %}
+        <a href="{{ url_for('sales') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'sales' else '' }}">Sales</a>
+        {% endif %}
+        {% if current_user.role == 'admin' or user_has_permission(current_user, 'can_view_reports') or user_has_permission(current_user, 'can_view_daily_sales_summary') %}
+        <a href="{{ url_for('reports') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'reports' else '' }}">Reports</a>
+        {% endif %}
+        {% if current_user.role == 'admin' or user_has_permission(current_user, 'can_view_daily_sales_summary') %}
+        <a href="{{ url_for('daily_sales_summary') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'daily_sales_summary' else '' }}">Daily Sales</a>
+        {% endif %}
+        <a href="{{ url_for('help_guide') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'help_guide' else '' }}">Help</a>
+
+        {% if current_user.role == 'admin' %}
+        <a href="{{ url_for('certificates') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'certificates' else '' }}">VMS Certificates</a>
+        <a href="{{ url_for('settings') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'settings' else '' }}">Settings</a>
+        <a href="{{ url_for('receipt_designer') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'receipt_designer' else '' }}">Receipt Designer</a>
+        {% endif %}
+        {% if current_user.role == 'admin' or user_has_permission(current_user, 'can_view_fiscal_logs') %}
+        <a href="{{ url_for('vms_logs') }}" class="px-4 py-2 rounded-2xl hover:bg-slate-100 {{ 'nav-active' if request.endpoint == 'vms_logs' else '' }}">VMS Logs</a>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  <div class="max-w-7xl mx-auto px-6 py-6">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="mb-4 px-4 py-3 rounded-2xl text-sm {{ 'bg-emerald-100 text-emerald-700' if category == 'success' else 'bg-red-100 text-red-700' if category == 'error' else 'bg-blue-100 text-blue-700' }}">
+            {{ message }}
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+  </div>
+
+  <script>
+    function showToast(msg, type='success') {
+      const toast = document.createElement('div');
+      toast.className = `fixed bottom-5 right-5 px-6 py-3 rounded-2xl shadow-xl text-sm z-[200] ${type === 'success' ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'}`;
+      toast.textContent = msg;
+      document.body.appendChild(toast);
+      setTimeout(() => toast.remove(), 2600);
+    }
+  </script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

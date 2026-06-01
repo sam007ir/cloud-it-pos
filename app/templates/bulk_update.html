@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Item Update{% endblock %}
+
+{% block content %}
+<div class="max-w-5xl">
+  <h1 class="text-3xl font-semibold tracking-tight mb-2">Bulk Item Update Tool</h1>
+  <p class="text-slate-500 mb-6">Update price, cost, reorder level, or category for multiple products at once.</p>
+
+  <div class="bg-white rounded-3xl border p-6">
+    <form id="bulk-form" onsubmit="applyBulkUpdate(event)">
+      <div class="mb-4">
+        <label class="text-sm font-semibold">Select Products</label>
+        <div class="max-h-64 overflow-auto border rounded-2xl p-3 mt-2 grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+          {% for p in products %}
+          <label class="flex items-center gap-2 p-1 hover:bg-slate-50 rounded">
+            <input type="checkbox" name="product_ids" value="{{ p.id }}">
+            <span>{{ p.name }} ({{ p.sku }})</span>
+          </label>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
+          <label class="text-xs font-semibold text-slate-500">New Selling Price</label>
+          <input type="number" step="0.01" name="price" placeholder="Leave blank to skip" class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">New Cost Price</label>
+          <input type="number" step="0.01" name="cost_price" placeholder="Leave blank to skip" class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">New Reorder Level</label>
+          <input type="number" name="reorder_level" placeholder="Leave blank to skip" class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">New Category</label>
+          <input type="text" name="category" placeholder="Leave blank to skip" class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+      </div>
+
+      <button type="submit" class="mt-6 w-full py-3 bg-[#0A4D68] text-white font-semibold rounded-2xl">
+        Apply Bulk Update to Selected Products
+      </button>
+    </form>
+  </div>
+</div>
+
+<script>
+async function applyBulkUpdate(e) {
+  e.preventDefault();
+  const form = document.getElementById('bulk-form');
+  const formData = new FormData(form);
+
+  const product_ids = [];
+  form.querySelectorAll('input[name="product_ids"]:checked').forEach(cb => product_ids.push(parseInt(cb.value)));
+
+  if (product_ids.length === 0) {
+    alert("Please select at least one product.");
+    return;
+  }
+
+  const payload = {
+    product_ids: product_ids,
+    price: formData.get('price') ? parseFloat(formData.get('price')) : null,
+    cost_price: formData.get('cost_price') ? parseFloat(formData.get('cost_price')) : null,
+    reorder_level: formData.get('reorder_level') ? parseInt(formData.get('reorder_level')) : null,
+    category: formData.get('category') || null
+  };
+
+  const res = await fetch('/api/bulk-update-products', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast(`Successfully updated ${data.updated_count} products`);
+    location.reload();
+  } else {
+    showToast(data.message || 'Bulk update failed', 'error');
+  }
+}
+</script>
+{% endblock %}

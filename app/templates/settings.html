@@ -1,0 +1,933 @@
+{% extends "base.html" %}
+
+{% block title %}Settings{% endblock %}
+
+{% block content %}
+<div class="mb-6">
+  <h1 class="text-3xl font-semibold tracking-tight">Settings</h1>
+  <p class="text-slate-500">System configuration, branches, users and permissions</p>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+  <!-- Branches Section -->
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="flex justify-between items-center mb-4">
+      <div class="font-semibold text-lg flex items-center gap-x-2">
+        <i class="fa-solid fa-building"></i>
+        <span>Branches / Locations</span>
+      </div>
+      <button onclick="showBranchModal()" 
+              class="px-4 py-2 bg-[#0A4D68] text-white text-sm rounded-2xl flex items-center gap-x-2">
+        <i class="fa-solid fa-plus"></i> Add Branch
+      </button>
+    </div>
+
+    <div class="space-y-3 text-sm max-h-[420px] overflow-auto">
+      {% for b in branches %}
+      <div class="border rounded-2xl p-4">
+        <div class="flex justify-between">
+          <div>
+            <div class="font-semibold">{{ b.name }}</div>
+            <div class="text-xs text-slate-500">{{ b.address }}</div>
+            <div class="text-xs font-mono mt-1">TIN: {{ b.tin }} • UID: {{ b.vms_uid }}</div>
+          </div>
+          <div class="flex gap-1">
+            <button onclick="editBranch({{ b.id }}, '{{ b.name }}', '{{ b.address or '' }}', '{{ b.tin }}', '{{ b.vms_uid or '' }}', '{{ b.phone or '' }}')"
+                    class="px-3 py-1 text-xs border rounded-xl hover:bg-slate-50">Edit</button>
+          </div>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-center py-8 text-slate-400">No branches yet. Add your first location.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Users Section -->
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="flex justify-between items-center mb-4">
+      <div class="font-semibold text-lg flex items-center gap-x-2">
+        <i class="fa-solid fa-users"></i>
+        <span>Users &amp; Permissions</span>
+      </div>
+      <button onclick="showUserModal()" 
+              class="px-4 py-2 bg-[#0A4D68] text-white text-sm rounded-2xl flex items-center gap-x-2">
+        <i class="fa-solid fa-user-plus"></i> Add User
+      </button>
+    </div>
+
+    <div class="space-y-3 text-sm max-h-[420px] overflow-auto">
+      {% for u in users %}
+      <div class="border rounded-2xl p-4 flex justify-between items-start">
+        <div>
+          <div class="font-semibold">{{ u.name }} <span class="text-xs font-normal text-slate-500">({{ u.username }})</span></div>
+          <div class="text-xs">{{ u.email or 'No email' }}</div>
+          <div class="mt-1">
+            <span class="px-2 py-0.5 text-xs rounded {{ 'bg-red-100 text-red-700' if u.role == 'admin' else 'bg-blue-100 text-blue-700' if u.role == 'manager' else 'bg-slate-100 text-slate-700' }}">
+              {{ u.role.upper() }}
+            </span>
+            {% if u.branch %}
+            <span class="text-xs text-slate-500 ml-2">@ {{ u.branch.name }}</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="text-right flex flex-col gap-1 items-end">
+          <button onclick="showUserModal({{ u.id }}, '{{ u.name or '' }}', '{{ u.username }}', '{{ u.email or '' }}', '{{ u.role }}', {{ u.branch_id or 'null' }}, '{{ u.permissions or '{}' }}')" 
+                  class="text-xs px-2 py-1 text-blue-600 hover:bg-blue-50 rounded">Edit</button>
+          {% if u.id != current_user.id %}
+          <button onclick="deleteUser({{ u.id }})" class="text-xs px-2 py-1 text-red-600 hover:bg-red-50 rounded">Delete</button>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="text-center py-8 text-slate-400">No users yet.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+</div>
+
+<!-- Tax Rates & Payment Methods -->
+<div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <!-- Tax Rates -->
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-4 flex justify-between items-center">
+      <span>Tax Rates (FRCS V3/V2)</span>
+      <button onclick="showTaxModal()" class="text-xs px-3 py-1 bg-emerald-600 text-white rounded-xl">+ Add Rate</button>
+    </div>
+
+    <div class="space-y-2 text-sm">
+      {% for tr in tax_rates %}
+      <div class="flex justify-between items-center border rounded-2xl px-3 py-2">
+        <div>
+          <span class="font-mono font-semibold">{{ tr.label }}</span> — {{ tr.rate }}%
+          {% if tr.description %}<span class="text-xs text-slate-500">({{ tr.description }})</span>{% endif %}
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 text-xs rounded {{ 'bg-emerald-100 text-emerald-700' if tr.is_active else 'bg-slate-200 text-slate-600' }}">
+            {{ 'Active' if tr.is_active else 'Inactive' }}
+          </span>
+          <button onclick="editTaxRate({{ tr.id }}, '{{ tr.label }}', {{ tr.rate }}, '{{ tr.description or '' }}', {{ tr.is_active|tojson }})" class="text-xs px-2 py-0.5 border rounded">Edit</button>
+          <button onclick="deleteTaxRate({{ tr.id }})" class="text-xs px-2 py-0.5 text-red-600">Delete</button>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-slate-400 text-sm py-2">No custom tax rates. Default 15% will be used.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Payment Methods -->
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-4 flex justify-between items-center">
+      <span>Payment Methods</span>
+      <button onclick="showPaymentModal()" class="text-xs px-3 py-1 bg-emerald-600 text-white rounded-xl">+ Add Method</button>
+    </div>
+
+    <div class="space-y-2 text-sm">
+      {% for pm in payment_methods %}
+      <div class="flex justify-between items-center border rounded-2xl px-3 py-2">
+        <div>
+          <span class="font-mono">{{ pm.code }}</span> — {{ pm.name }}
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="px-2 py-0.5 text-xs rounded {{ 'bg-emerald-100 text-emerald-700' if pm.is_active else 'bg-slate-200 text-slate-600' }}">
+            {{ 'Active' if pm.is_active else 'Inactive' }}
+          </span>
+          <button onclick="editPaymentMethod({{ pm.id }}, '{{ pm.code }}', '{{ pm.name }}', {{ pm.is_active|tojson }})" class="text-xs px-2 py-0.5 border rounded">Edit</button>
+          <button onclick="deletePaymentMethod({{ pm.id }})" class="text-xs px-2 py-0.5 text-red-600">Delete</button>
+        </div>
+      </div>
+      {% else %}
+      <div class="text-slate-400 text-sm py-2">No custom payment methods configured.</div>
+      {% endfor %}
+    </div>
+  </div>
+</div>
+
+<!-- Tax Rate Modal -->
+<div id="tax-modal" class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden">
+    
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div id="tax-modal-title" class="font-semibold text-lg">Add Tax Rate</div>
+      <button onclick="hideTaxModal()" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <form id="tax-form" onsubmit="saveTaxRate(event)">
+      <div class="p-6 space-y-5 text-sm">
+        <input type="hidden" id="tax-id">
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Label (A, B, C...) <span class="text-red-500">*</span></label>
+            <input id="tax-label" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Rate (%) <span class="text-red-500">*</span></label>
+            <input id="tax-rate" type="number" step="0.01" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Description</label>
+          <input id="tax-desc" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="tax-active" checked class="accent-[#0A4D68]">
+          <label class="text-sm">Active</label>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
+        <button type="button" onclick="hideTaxModal()" class="flex-1 py-2.5 border rounded-2xl hover:bg-white">Cancel</button>
+        <button type="submit" class="flex-1 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold">Save Tax Rate</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Payment Method Modal -->
+<div id="payment-modal" class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden">
+    
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div id="payment-modal-title" class="font-semibold text-lg">Add Payment Method</div>
+      <button onclick="hidePaymentModal()" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <form id="payment-form" onsubmit="savePaymentMethod(event)">
+      <div class="p-6 space-y-5 text-sm">
+        <input type="hidden" id="payment-id">
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Code <span class="text-red-500">*</span></label>
+          <input id="payment-code" placeholder="e.g. CASH, CARD, MPAISA" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Display Name <span class="text-red-500">*</span></label>
+          <input id="payment-name" placeholder="e.g. Cash, Credit Card" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+
+        <div class="flex items-center gap-2 pt-1">
+          <input type="checkbox" id="payment-active" checked class="accent-[#0A4D68]">
+          <label class="text-sm">Active</label>
+        </div>
+      </div>
+
+      <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
+        <button type="button" onclick="hidePaymentModal()" class="flex-1 py-2.5 border rounded-2xl hover:bg-white">Cancel</button>
+        <button type="submit" class="flex-1 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold">Save Payment Method</button>
+      </div>
+    </form>
+  </div>
+</div>
+          <input id="payment-code" required class="w-full border rounded-2xl px-4 py-2 text-sm uppercase">
+        </div>
+        <div>
+          <label class="text-xs font-semibold">Display Name</label>
+          <input id="payment-name" required class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+        <div class="flex items-center gap-2">
+          <input type="checkbox" id="payment-active" checked>
+          <label class="text-sm">Active</label>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="hidePaymentModal()" class="flex-1 py-2 border rounded-2xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2 bg-[#0A4D68] text-white rounded-2xl">Save</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Branch Modal -->
+<div id="branch-modal" class="hidden fixed inset-0 bg-black/70 z-[140] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden">
+    
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div id="branch-modal-title" class="font-semibold text-lg">Add Branch</div>
+      <button onclick="hideBranchModal()" class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
+    </div>
+
+    <form id="branch-form" onsubmit="saveBranch(event)">
+      <div class="p-6 space-y-5 text-sm">
+        <input type="hidden" id="branch-id">
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Branch Name <span class="text-red-500">*</span></label>
+          <input type="text" id="branch-name" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Address</label>
+          <input type="text" id="branch-address" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">FRCS TIN <span class="text-red-500">*</span></label>
+            <input type="text" id="branch-tin" required class="w-full border rounded-2xl px-4 py-2.5 font-mono focus:outline-none focus:border-[#0A4D68]">
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">VMS UID</label>
+            <input type="text" id="branch-uid" class="w-full border rounded-2xl px-4 py-2.5 font-mono focus:outline-none focus:border-[#0A4D68]">
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+          <input type="text" id="branch-phone" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+      </div>
+
+      <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
+        <button type="button" onclick="hideBranchModal()" class="flex-1 py-2.5 border rounded-2xl hover:bg-white">Cancel</button>
+        <button type="submit" class="flex-1 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold">Save Branch</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Receipt Design Settings -->
+<div class="mt-6 bg-white rounded-3xl border p-6">
+  <div class="font-semibold text-lg mb-4 flex items-center justify-between">
+    <span>Receipt Design (80mm or A4)</span>
+    <span class="text-xs px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full">100% editable layout</span>
+  </div>
+
+  <div class="mb-4 text-sm bg-amber-50 border border-amber-200 rounded-2xl p-3">
+    <strong>Full design control:</strong> For complete layout freedom, edit the file 
+    <code class="bg-white px-1 rounded">app/templates/receipt.html</code> directly. 
+    You can change structure, add sections, styling, etc. The options below control the easy parts.
+  </div>
+
+  <form onsubmit="saveReceiptConfig(event)">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div>
+        <label class="text-xs font-semibold text-slate-500">Default Layout</label>
+        <select id="rc-layout" class="w-full border rounded-2xl px-4 py-2 text-sm">
+          <option value="80mm" {% if receipt_config.layout == '80mm' %}selected{% endif %}>80mm Thermal (Standard POS)</option>
+          <option value="a4" {% if receipt_config.layout == 'a4' %}selected{% endif %}>A4 (Standard)</option>
+        </select>
+      </div>
+      <div>
+        <label class="text-xs font-semibold text-slate-500">Company Name</label>
+        <input type="text" id="rc-company" value="{{ receipt_config.company_name or '' }}" class="w-full border rounded-2xl px-4 py-2 text-sm">
+      </div>
+    </div>
+
+    <div class="mb-3">
+      <label class="text-xs font-semibold text-slate-500">Header Text (appears under company name)</label>
+      <input type="text" id="rc-header" value="{{ receipt_config.header_text or '' }}" class="w-full border rounded-2xl px-4 py-2 text-sm">
+    </div>
+    <div class="mb-4">
+      <label class="text-xs font-semibold text-slate-500">Footer Text</label>
+      <textarea id="rc-footer" class="w-full border rounded-2xl px-4 py-2 text-sm" rows="2">{{ receipt_config.footer_text or '' }}</textarea>
+    </div>
+
+    <div class="mb-4">
+      <label class="text-xs font-semibold text-slate-500">Custom Header HTML (for complete top layout control)</label>
+      <textarea id="rc-custom-header" class="w-full border rounded-2xl px-4 py-2 text-sm font-mono" rows="4" placeholder="Paste your own HTML here for the very top of the receipt (logo, address, slogan, etc.)">{{ receipt_config.custom_header_html or '' }}</textarea>
+      <p class="text-[10px] text-slate-400 mt-1">This is injected at the very top. Use for full design freedom without editing the template file.</p>
+    </div>
+
+    <div class="mt-4 pt-4 border-t">
+      <a href="{{ url_for('receipt_designer') }}" 
+         class="inline-flex items-center px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-sm font-semibold">
+        <i class="fa-solid fa-mouse-pointer mr-2"></i>
+        Open Visual Drag &amp; Drop Receipt Designer
+      </a>
+      <p class="text-[10px] text-slate-400 mt-1">Move any database field with your mouse. See all available fields from Order, Branch, Debtor, Fiscal, etc.</p>
+    </div>
+
+    <!-- Logo Upload -->
+    <div class="mb-4">
+      <label class="text-xs font-semibold text-slate-500 block mb-1">Logo (recommended max 200px wide)</label>
+      <div class="flex items-center gap-4">
+        {% if receipt_config.show_logo and receipt_config.logo_base64 %}
+          <img id="logo-preview" src="{{ receipt_config.logo_base64 }}" class="h-12 border rounded" alt="Current logo">
+        {% else %}
+          <img id="logo-preview" src="" class="h-12 border rounded hidden" alt="Logo preview">
+        {% endif %}
+        <div>
+          <input type="file" id="logo-upload" accept="image/*" class="text-sm" onchange="previewAndStoreLogo(this)">
+          <button type="button" onclick="removeLogo()" class="ml-2 text-xs px-2 py-1 border rounded text-red-600">Remove</button>
+        </div>
+      </div>
+      <input type="hidden" id="rc-logo-base64" value="{{ receipt_config.logo_base64 or '' }}">
+      <div class="flex items-center gap-2 mt-1">
+        <input type="checkbox" id="rc-show-logo" {% if receipt_config.show_logo %}checked{% endif %}>
+        <label for="rc-show-logo" class="text-xs">Show logo on receipts</label>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="rc-show-tax" {% if receipt_config.show_tax_breakdown %}checked{% endif %}>
+        <label for="rc-show-tax" class="text-sm">Show tax breakdown</label>
+      </div>
+      <div class="flex items-center gap-2">
+        <input type="checkbox" id="rc-show-signature" {% if receipt_config.show_signature_block %}checked{% endif %}>
+        <label for="rc-show-signature" class="text-sm">Show fiscal signature block (when VMS Real)</label>
+      </div>
+    </div>
+
+    <button type="submit" class="px-6 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold">Save Receipt Settings</button>
+    <p class="text-[10px] text-slate-400 mt-2">
+      For 100% custom layout, colors, structure, fonts, or extra sections — edit <code>app/templates/receipt.html</code>.
+    </p>
+  </form>
+</div>
+
+<script>
+// Logo preview + base64 storage
+function previewAndStoreLogo(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      const preview = document.getElementById('logo-preview');
+      preview.src = e.target.result;
+      preview.classList.remove('hidden');
+      document.getElementById('rc-logo-base64').value = e.target.result;
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+
+function removeLogo() {
+  document.getElementById('logo-preview').src = '';
+  document.getElementById('logo-preview').classList.add('hidden');
+  document.getElementById('rc-logo-base64').value = '';
+  document.getElementById('logo-upload').value = '';
+}
+
+// Updated receipt config saver (includes logo + toggles)
+async function saveReceiptConfig(e) {
+  e.preventDefault();
+  const data = {
+    layout: document.getElementById('rc-layout').value,
+    company_name: document.getElementById('rc-company').value,
+    header_text: document.getElementById('rc-header').value,
+    footer_text: document.getElementById('rc-footer').value,
+    show_logo: document.getElementById('rc-show-logo').checked,
+    logo_base64: document.getElementById('rc-logo-base64').value,
+    show_tax_breakdown: document.getElementById('rc-show-tax').checked,
+    show_signature_block: document.getElementById('rc-show-signature').checked,
+    custom_header_html: document.getElementById('rc-custom-header').value
+  };
+
+  const res = await fetch('/api/receipt-config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data)
+  });
+  const json = await res.json();
+  if (json.success) {
+    alert('Receipt settings saved! New receipts will use the updated design.');
+    location.reload();
+  } else {
+    alert('Failed to save receipt settings');
+  }
+}
+</script>
+
+<!-- System Information -->
+<div class="mt-6 bg-white rounded-3xl border p-6">
+  <div class="font-semibold text-lg mb-3">System Information</div>
+  <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+    <div>
+      <div class="text-xs text-slate-500">Database</div>
+      <div class="font-medium">SQLite (frcs_vms_pos.db)</div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-500">Migrations</div>
+      <div class="font-medium text-emerald-600">Alembic (Auto)</div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-500">Version</div>
+      <div class="font-medium">FRCS VMS POS v1.0 (Production)</div>
+    </div>
+    <div>
+      <div class="text-xs text-slate-500">Status</div>
+      <div class="font-medium text-emerald-600">Ready</div>
+    </div>
+  </div>
+</div>
+
+<!-- Backup & Restore Database -->
+<div class="mt-6 bg-white rounded-3xl border p-6">
+  <div class="font-semibold text-lg mb-2">Backup &amp; Restore Database</div>
+  <p class="text-sm text-slate-600 mb-4">
+    <strong>Important:</strong> Always backup before restoring. After restoring, restart the application.
+  </p>
+
+  <div class="flex flex-wrap gap-3">
+    <a href="/api/system/backup" 
+       class="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+      <i class="fa-solid fa-download"></i> 
+      <span>Download Database Backup</span>
+    </a>
+
+    <form id="restore-form" enctype="multipart/form-data" class="flex items-center gap-x-2">
+      <label class="cursor-pointer px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+        <i class="fa-solid fa-upload"></i> 
+        <span>Restore from Backup</span>
+        <input type="file" name="db_file" accept=".db" class="hidden" onchange="restoreDatabase(this)">
+      </label>
+    </form>
+  </div>
+
+  <div class="text-[10px] text-slate-400 mt-3">
+    Only .db files are accepted. The current database will be replaced.
+  </div>
+</div>
+
+<!-- Special Pricing Section (quick management) -->
+<div class="mt-6 bg-white rounded-3xl border p-6">
+  <div class="font-semibold text-lg mb-2">Special Pricing Rules</div>
+  <p class="text-sm text-slate-500 mb-4">
+    Define rules for groups. Use the same "Special Pricing Group" value on products in Inventory.
+  </p>
+
+  <div class="text-sm mb-4">
+    {% for rule in special_rules %}
+    <div class="border-b py-1 flex justify-between">
+      <div><strong>{{ rule.group }}</strong> — {{ rule.name or rule.rule_type }} ({{ rule.min_quantity }} @ FJD {{ "%.2f"|format(rule.special_price) }})</div>
+    </div>
+    {% else %}
+    <div class="text-slate-400">No rules defined yet.</div>
+    {% endfor %}
+  </div>
+
+  <div class="text-xs text-slate-400">Full rule editor coming in next update. For now, you can add rules via the API or we can expand this.</div>
+</div>
+
+<!-- User Modal -->
+<div id="user-modal" class="hidden fixed inset-0 bg-black/60 z-[140] flex items-center justify-center">
+  <div class="bg-white w-full max-w-md rounded-3xl p-6">
+    <div id="user-modal-title" class="font-semibold text-lg mb-4">Create New User</div>
+    
+    <form onsubmit="saveUser(event)">
+      <input type="hidden" id="edit-user-id" value="">
+      
+      <div class="space-y-3">
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Full Name</label>
+            <input type="text" id="user-name" class="w-full border rounded-2xl px-4 py-2 text-sm">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Username *</label>
+            <input type="text" id="user-username" required class="w-full border rounded-2xl px-4 py-2 text-sm">
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Email</label>
+          <input type="email" id="user-email" class="w-full border rounded-2xl px-4 py-2 text-sm">
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Password <span id="password-required-star">*</span></label>
+            <input type="password" id="user-password" class="w-full border rounded-2xl px-4 py-2 text-sm">
+            <div id="password-hint" class="text-[10px] text-slate-400 mt-0.5 hidden">Leave blank to keep current password</div>
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Role *</label>
+            <select id="user-role" required class="w-full border rounded-2xl px-4 py-2 text-sm">
+              <option value="staff">Staff / Cashier</option>
+              <option value="manager">Manager</option>
+              <option value="admin">Administrator</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Assign to Branch</label>
+          <select id="user-branch" class="w-full border rounded-2xl px-4 py-2 text-sm">
+            <option value="">-- No Branch --</option>
+            {% for b in branches %}
+            <option value="{{ b.id }}">{{ b.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="pt-2">
+          <label class="text-xs font-semibold text-slate-500 mb-1 block">Advanced Permissions (for non-admins)</label>
+          <div class="grid grid-cols-2 gap-x-4 text-xs">
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-manage-users" value="can_manage_users"> Manage Users</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-stock-take" value="can_stock_take"> Stock Take</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-purchase-orders" value="can_create_po"> Create Purchase Orders</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-reports" value="can_view_reports"> View Reports</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-issue-credit-notes" value="can_issue_credit_notes"> Issue Credit Notes</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-view-daily-sales" value="can_view_daily_sales_summary"> Daily Sales Summary</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-view-debtors" value="can_view_debtors"> View Debtors</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-manage-debtors" value="can_manage_debtors"> Manage Debtors</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-stock-adjustment" value="can_do_stock_adjustment"> Stock Adjustment</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-view-suppliers" value="can_view_suppliers"> View Suppliers</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-view-fiscal-logs" value="can_view_fiscal_logs"> View VMS / Fiscal Logs</label>
+            <label class="flex items-center gap-2"><input type="checkbox" id="perm-view-sales" value="can_view_sales"> View Sales History</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="hideUserModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+        <button type="submit" id="user-submit-btn" class="flex-1 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-semibold">Create User</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showBranchModal() {
+  document.getElementById('branch-modal').classList.remove('hidden');
+  document.getElementById('branch-modal-title').textContent = 'Add New Branch';
+  document.getElementById('branch-form').reset();
+  document.getElementById('branch-id').value = '';
+}
+
+function hideBranchModal() {
+  document.getElementById('branch-modal').classList.add('hidden');
+}
+
+async function saveBranch(e) {
+  e.preventDefault();
+  const id = document.getElementById('branch-id').value;
+  const payload = {
+    name: document.getElementById('branch-name').value,
+    address: document.getElementById('branch-address').value,
+    tin: document.getElementById('branch-tin').value,
+    vms_uid: document.getElementById('branch-uid').value,
+    phone: document.getElementById('branch-phone').value
+  };
+
+  let url = '/api/branches';
+  let method = 'POST';
+  if (id) {
+    url = `/api/branches/${id}`;
+    method = 'PUT';
+  }
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Branch saved successfully');
+    location.reload();
+  } else {
+    showToast(data.message || 'Error saving branch', 'error');
+  }
+}
+
+function editBranch(id, name, address, tin, uid, phone) {
+  document.getElementById('branch-modal').classList.remove('hidden');
+  document.getElementById('branch-modal-title').textContent = 'Edit Branch';
+  document.getElementById('branch-id').value = id;
+  document.getElementById('branch-name').value = name;
+  document.getElementById('branch-address').value = address;
+  document.getElementById('branch-tin').value = tin;
+  document.getElementById('branch-uid').value = uid;
+  document.getElementById('branch-phone').value = phone;
+}
+
+// User functions
+let currentEditingUserId = null;
+
+function showUserModal(userId = null, name = '', username = '', email = '', role = 'staff', branchId = null, permissionsJson = '{}') {
+  const modal = document.getElementById('user-modal');
+  modal.classList.remove('hidden');
+
+  const title = document.getElementById('user-modal-title');
+  const submitBtn = document.getElementById('user-submit-btn');
+  const passwordInput = document.getElementById('user-password');
+  const passwordStar = document.getElementById('password-required-star');
+  const passwordHint = document.getElementById('password-hint');
+  const usernameInput = document.getElementById('user-username');
+
+  currentEditingUserId = userId;
+
+  if (userId) {
+    // Edit mode
+    title.textContent = 'Edit User';
+    submitBtn.textContent = 'Save Changes';
+    passwordInput.required = false;
+    passwordStar.classList.add('hidden');
+    passwordHint.classList.remove('hidden');
+    usernameInput.readOnly = true; // Don't allow changing username easily
+
+    // Prefill
+    document.getElementById('edit-user-id').value = userId;
+    document.getElementById('user-name').value = name;
+    document.getElementById('user-username').value = username;
+    document.getElementById('user-email').value = email;
+    document.getElementById('user-password').value = '';
+    document.getElementById('user-role').value = role;
+    document.getElementById('user-branch').value = branchId || '';
+
+    // Permissions
+    try {
+      const perms = JSON.parse(permissionsJson || '{}');
+      document.getElementById('perm-manage-users').checked = !!perms.can_manage_users;
+      document.getElementById('perm-stock-take').checked = !!perms.can_stock_take;
+      document.getElementById('perm-purchase-orders').checked = !!perms.can_create_po;
+      document.getElementById('perm-reports').checked = !!perms.can_view_reports;
+      document.getElementById('perm-issue-credit-notes').checked = !!perms.can_issue_credit_notes;
+      document.getElementById('perm-view-daily-sales').checked = !!perms.can_view_daily_sales_summary;
+      document.getElementById('perm-view-debtors').checked = !!perms.can_view_debtors;
+      document.getElementById('perm-manage-debtors').checked = !!perms.can_manage_debtors;
+      document.getElementById('perm-stock-adjustment').checked = !!perms.can_do_stock_adjustment;
+      document.getElementById('perm-view-suppliers').checked = !!perms.can_view_suppliers;
+      document.getElementById('perm-view-fiscal-logs').checked = !!perms.can_view_fiscal_logs;
+      document.getElementById('perm-view-sales').checked = !!perms.can_view_sales;
+    } catch (e) {}
+  } else {
+    // Create mode
+    title.textContent = 'Create New User';
+    submitBtn.textContent = 'Create User';
+    passwordInput.required = true;
+    passwordStar.classList.remove('hidden');
+    passwordHint.classList.add('hidden');
+    usernameInput.readOnly = false;
+
+    document.getElementById('edit-user-id').value = '';
+    document.querySelector('#user-modal form').reset();
+  }
+}
+
+function hideUserModal() {
+  document.getElementById('user-modal').classList.add('hidden');
+  currentEditingUserId = null;
+}
+
+async function saveUser(e) {
+  e.preventDefault();
+  const perms = {};
+  if (document.getElementById('perm-manage-users').checked) perms.can_manage_users = true;
+  if (document.getElementById('perm-stock-take').checked) perms.can_stock_take = true;
+  if (document.getElementById('perm-purchase-orders').checked) perms.can_create_po = true;
+  if (document.getElementById('perm-reports').checked) perms.can_view_reports = true;
+  if (document.getElementById('perm-issue-credit-notes').checked) perms.can_issue_credit_notes = true;
+  if (document.getElementById('perm-view-daily-sales').checked) perms.can_view_daily_sales_summary = true;
+  if (document.getElementById('perm-view-debtors').checked) perms.can_view_debtors = true;
+  if (document.getElementById('perm-manage-debtors').checked) perms.can_manage_debtors = true;
+  if (document.getElementById('perm-stock-adjustment').checked) perms.can_do_stock_adjustment = true;
+  if (document.getElementById('perm-view-suppliers').checked) perms.can_view_suppliers = true;
+  if (document.getElementById('perm-view-fiscal-logs').checked) perms.can_view_fiscal_logs = true;
+  if (document.getElementById('perm-view-sales').checked) perms.can_view_sales = true;
+
+  const editId = document.getElementById('edit-user-id').value;
+  const password = document.getElementById('user-password').value;
+
+  const payload = {
+    name: document.getElementById('user-name').value,
+    username: document.getElementById('user-username').value,
+    email: document.getElementById('user-email').value,
+    role: document.getElementById('user-role').value,
+    branch_id: document.getElementById('user-branch').value || null,
+    permissions: JSON.stringify(perms)
+  };
+
+  if (password) {
+    payload.password = password;
+  }
+
+  let url = '/api/users';
+  let method = 'POST';
+
+  if (editId) {
+    url = `/api/users/${editId}`;
+    method = 'PUT';
+  }
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast(editId ? 'User updated successfully' : 'User created successfully');
+    location.reload();
+  } else {
+    showToast(data.message || 'Error saving user', 'error');
+  }
+}
+
+async function deleteUser(userId) {
+  if (!confirm('Are you sure you want to delete this user? This cannot be undone.')) return;
+  const res = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+  const data = await res.json().catch(() => ({}));
+  if (res.ok) {
+    showToast('User deleted');
+    location.reload();
+  } else {
+    showToast(data.message || 'Failed to delete user', 'error');
+  }
+}
+
+async function addTaxRate(e) {
+  e.preventDefault();
+  const payload = {
+    label: document.getElementById('tax-label').value,
+    rate: parseFloat(document.getElementById('tax-rate').value)
+  };
+  await fetch('/api/tax-rates', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  location.reload();
+}
+
+async function addPaymentMethod(e) {
+  e.preventDefault();
+  const payload = {
+    code: document.getElementById('pm-code').value,
+    name: document.getElementById('pm-name').value
+  };
+  await fetch('/api/payment-methods', { method: 'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload) });
+  location.reload();
+}
+
+// === Tax Rate Management (New Modals) ===
+function showTaxModal() {
+  document.getElementById('tax-modal').classList.remove('hidden');
+  document.getElementById('tax-modal-title').textContent = 'Add Tax Rate';
+  document.getElementById('tax-form').reset();
+  document.getElementById('tax-id').value = '';
+  document.getElementById('tax-active').checked = true;
+}
+
+function hideTaxModal() {
+  document.getElementById('tax-modal').classList.add('hidden');
+}
+
+async function saveTaxRate(e) {
+  e.preventDefault();
+  const id = document.getElementById('tax-id').value;
+  const payload = {
+    label: document.getElementById('tax-label').value,
+    rate: parseFloat(document.getElementById('tax-rate').value),
+    description: document.getElementById('tax-desc').value,
+    is_active: document.getElementById('tax-active').checked
+  };
+
+  const url = id ? `/api/tax-rates/${id}` : '/api/tax-rates';
+  const method = id ? 'PUT' : 'POST';
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    showToast('Tax rate saved');
+    location.reload();
+  }
+}
+
+function editTaxRate(id, label, rate, desc, isActive) {
+  document.getElementById('tax-modal').classList.remove('hidden');
+  document.getElementById('tax-modal-title').textContent = 'Edit Tax Rate';
+  document.getElementById('tax-id').value = id;
+  document.getElementById('tax-label').value = label;
+  document.getElementById('tax-rate').value = rate;
+  document.getElementById('tax-desc').value = desc;
+  document.getElementById('tax-active').checked = isActive;
+}
+
+async function deleteTaxRate(id) {
+  if (!confirm('Delete this tax rate?')) return;
+  await fetch(`/api/tax-rates/${id}`, { method: 'DELETE' });
+  location.reload();
+}
+
+// === Payment Method Management (New Modals) ===
+function showPaymentModal() {
+  document.getElementById('payment-modal').classList.remove('hidden');
+  document.getElementById('payment-modal-title').textContent = 'Add Payment Method';
+  document.getElementById('payment-form').reset();
+  document.getElementById('payment-id').value = '';
+  document.getElementById('payment-active').checked = true;
+}
+
+function hidePaymentModal() {
+  document.getElementById('payment-modal').classList.add('hidden');
+}
+
+async function savePaymentMethod(e) {
+  e.preventDefault();
+  const id = document.getElementById('payment-id').value;
+  const payload = {
+    code: document.getElementById('payment-code').value.toUpperCase(),
+    name: document.getElementById('payment-name').value,
+    is_active: document.getElementById('payment-active').checked
+  };
+
+  const url = id ? `/api/payment-methods/${id}` : '/api/payment-methods';
+  const method = id ? 'PUT' : 'POST';
+
+  const res = await fetch(url, {
+    method: method,
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  if (res.ok) {
+    showToast('Payment method saved');
+    location.reload();
+  }
+}
+
+function editPaymentMethod(id, code, name, isActive) {
+  document.getElementById('payment-modal').classList.remove('hidden');
+  document.getElementById('payment-modal-title').textContent = 'Edit Payment Method';
+  document.getElementById('payment-id').value = id;
+  document.getElementById('payment-code').value = code;
+  document.getElementById('payment-name').value = name;
+  document.getElementById('payment-active').checked = isActive;
+}
+
+async function deletePaymentMethod(id) {
+  if (!confirm('Delete this payment method?')) return;
+  await fetch(`/api/payment-methods/${id}`, { method: 'DELETE' });
+  location.reload();
+}
+
+async function restoreDatabase(input) {
+  if (!input.files.length) return;
+
+  if (!confirm('WARNING: This will completely replace the current database. A restart will be required after restore. Continue?')) {
+    input.value = '';
+    return;
+  }
+
+  const formData = new FormData();
+  formData.append('db_file', input.files[0]);
+
+  try {
+    const res = await fetch('/api/system/restore', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      alert(data.message || 'Database restored successfully. Please restart the application now.');
+    } else {
+      alert('Restore failed: ' + (data.message || 'Unknown error'));
+    }
+  } catch (err) {
+    alert('Restore error: ' + err);
+  }
+
+  input.value = '';
+}
+</script>
+{% endblock %}

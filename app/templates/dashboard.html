@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="flex items-end justify-between mb-6">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Dashboard</h1>
+    <p class="text-slate-500">Real-time overview • All branches</p>
+  </div>
+  <a href="{{ url_for('pos') }}" class="flex items-center gap-x-2 px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-semibold text-sm">
+    <i class="fa-solid fa-cash-register"></i> <span>Open POS Terminal</span>
+  </a>
+</div>
+
+<!-- KPI Cards -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">ACTIVE BRANCHES</div>
+    <div class="text-4xl font-semibold mt-1">{{ branches|length }}</div>
+  </div>
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">TOTAL PRODUCTS</div>
+    <div class="text-4xl font-semibold mt-1">{{ total_products }}</div>
+  </div>
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">INVENTORY VALUE</div>
+    <div class="text-4xl font-semibold mt-1 tabular-nums">FJD {{ "{:,.2f}".format(total_stock_value) }}</div>
+  </div>
+  <div class="bg-white rounded-3xl p-5 border">
+    <div class="text-xs text-slate-500">LOW STOCK ITEMS</div>
+    <div class="text-4xl font-semibold mt-1 text-amber-600">{{ low_stock_count }}</div>
+    <div class="text-xs text-amber-600">Requires attention</div>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+  <!-- Recent Sales -->
+  <div class="lg:col-span-7 bg-white rounded-3xl border p-6">
+    <div class="flex justify-between mb-4">
+      <div class="font-semibold">Recent Sales</div>
+      <a href="{{ url_for('sales') }}" class="text-xs text-emerald-600 font-medium">View all →</a>
+    </div>
+    <div class="space-y-2 text-sm">
+      {% for sale in recent_sales %}
+      <div class="flex justify-between items-center border-b pb-2 last:border-none">
+        <div>
+          <div class="font-medium">#{{ sale.id }} — {{ sale.customer_name }}</div>
+          <div class="text-xs text-slate-500">{{ sale.created_at.strftime('%d %b %Y %H:%M') }} • {{ sale.branch.name if sale.branch else 'Branch' }}</div>
+        </div>
+        <div class="text-right">
+          <div class="font-semibold tabular-nums">FJD {{ "%.2f"|format(sale.total) }}</div>
+          {% if sale.fiscal_invoice %}
+          <div class="text-[10px] text-emerald-600">VMS ✓</div>
+          {% endif %}
+        </div>
+      </div>
+      {% else %}
+      <div class="text-slate-400 py-8 text-center">No sales yet today.</div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Quick Actions + VMS Status -->
+  <div class="lg:col-span-5 bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-4">Quick Actions</div>
+    <div class="space-y-2">
+      <a href="{{ url_for('pos') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-2xl border">
+        <i class="fa-solid fa-cash-register w-5 text-emerald-600"></i>
+        <span class="font-medium">Open POS Terminal</span>
+      </a>
+      <a href="{{ url_for('inventory') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-2xl border">
+        <i class="fa-solid fa-boxes w-5 text-blue-600"></i>
+        <span class="font-medium">Manage Inventory</span>
+      </a>
+      {% if user.role == 'admin' %}
+      <a href="{{ url_for('certificates') }}" class="flex items-center gap-3 px-4 py-3 hover:bg-slate-50 rounded-2xl border">
+        <i class="fa-solid fa-certificate w-5 text-purple-600"></i>
+        <span class="font-medium">VMS Certificate Management</span>
+      </a>
+      {% endif %}
+    </div>
+
+    <div class="mt-6 pt-4 border-t">
+      <div class="text-xs font-semibold text-slate-500 mb-2">PENDING VMS TRANSMISSIONS</div>
+      <div class="text-3xl font-semibold">{{ pending_vms }}</div>
+      <div class="text-xs text-emerald-600">All recent sales successfully fiscalized</div>
+    </div>
+  </div>
+
+  <!-- Help Guide Card -->
+  <div class="lg:col-span-5 bg-white rounded-3xl border p-6 mt-4 lg:mt-0">
+    <div class="font-semibold mb-3 flex items-center gap-x-2">
+      <i class="fa-solid fa-question-circle text-blue-600"></i>
+      <span>Need Help?</span>
+    </div>
+    <p class="text-sm text-slate-600 mb-4">
+      Complete practical guide with dedicated Shop Management and Product Management sections, barcode/pack support, VMS Real mode, full movement history, and all current features.
+    </p>
+    <a href="{{ url_for('help_guide') }}" 
+       class="inline-flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-sm font-semibold">
+      <i class="fa-solid fa-book mr-2"></i>
+      Open Help Guide
+    </a>
+  </div>
+</div>
+{% endblock %}

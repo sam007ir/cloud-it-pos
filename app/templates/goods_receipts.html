@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+
+{% block title %}Goods Receipts{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <h1 class="text-3xl font-semibold tracking-tight">Goods Receipts History</h1>
+</div>
+
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-5 py-3 text-left">Date</th>
+        <th class="px-4 py-3">PO #</th>
+        <th class="px-4 py-3">Supplier Invoice</th>
+        <th class="px-4 py-3">Supplier / Branch</th>
+        <th class="px-4 py-3">Items Received</th>
+        <th class="px-5 py-3 text-right">Notes</th>
+      </tr>
+    </thead>
+    <tbody class="divide-y">
+      {% for gr in grs %}
+      <tr>
+        <td class="px-5 py-3">{{ gr.received_at.strftime('%Y-%m-%d %H:%M') }}</td>
+        <td class="px-4 py-3 font-mono">
+          {% if gr.purchase_order_id %}
+            <a href="{{ url_for('purchase_orders') }}" class="text-blue-600 hover:underline">#{{ gr.purchase_order_id }}</a>
+          {% else %}
+            -
+          {% endif %}
+        </td>
+        <td class="px-4 py-3 font-mono text-xs">{{ gr.supplier_invoice_no or '-' }}</td>
+        <td class="px-4 py-3">
+          {{ gr.supplier.name if gr.supplier else '-' }}<br>
+          <span class="text-xs text-slate-500">{{ gr.branch.name if gr.branch else '' }}</span>
+        </td>
+        <td class="px-4 py-3 text-xs">
+          {% for item in gr.items %}
+            {{ item.product.name if item.product else 'Item' }} × {{ item.received_qty }}<br>
+            <span class="text-slate-500">
+              VEP: {{ "%.2f"|format(item.cost_vep or 0) }} | 
+              VIP: {{ "%.2f"|format(item.cost_vip or 0) }}
+            </span><br>
+          {% endfor %}
+        </td>
+        <td class="px-5 py-3 text-xs text-slate-500">{{ gr.notes or '' }}</td>
+        <td class="px-4 py-3">
+          {% if not gr.is_reversed and user.role == 'admin' %}
+          <button onclick="reverseGoodsReceipt({{ gr.id }}, this)" 
+                  class="text-xs px-3 py-1 border border-red-300 text-red-600 hover:bg-red-50 rounded-xl">
+            Reverse
+          </button>
+          {% elif gr.is_reversed %}
+          <span class="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">Reversed</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% else %}
+      <tr><td colspan="7" class="px-5 py-8 text-center text-slate-400">No goods receipts recorded yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function reverseGoodsReceipt(grId, button) {
+  if (!confirm('Are you sure you want to REVERSE this Goods Receipt? This will subtract the stock back and cannot be undone easily.')) {
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = 'Reversing...';
+
+  const res = await fetch(`/api/goods-receipts/${grId}/reverse`, {
+    method: 'POST'
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast(data.message);
+    setTimeout(() => location.reload(), 800);
+  } else {
+    alert('Failed: ' + (data.message || 'Unknown error'));
+    button.disabled = false;
+    button.textContent = 'Reverse';
+  }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,556 @@
+{% extends "base.html" %}
+
+{% block title %}POS Terminal{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-5">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">POS Terminal</h1>
+    <div class="flex items-center gap-x-3 mt-1">
+      <p class="text-emerald-600 flex items-center gap-x-2 text-sm">
+        <i class="fa-solid fa-wifi"></i> 
+        <span id="current-branch-name">{{ branch.name }} • VMS UID: {{ branch.vms_uid }}</span>
+        {% if certificate %}
+        <span class="ml-2 px-2 py-px bg-emerald-100 text-emerald-700 rounded text-xs font-bold" title="Certificate is active and will be used for signing">
+          CERT ACTIVE ({{ certificate.method.upper() }})
+        </span>
+        {% else %}
+        <a href="{{ url_for('certificates') }}" class="ml-2 px-2 py-px bg-red-100 text-red-700 rounded text-xs font-bold">NO CERTIFICATE - CLICK TO SETUP</a>
+        {% endif %}
+      </p>
+
+      {% if user.role in ['admin', 'manager'] and all_branches|length > 1 %}
+      <div class="flex items-center gap-x-1 text-sm">
+        <span class="text-slate-500 text-xs">Branch:</span>
+        <select id="branch-switcher" class="border border-slate-300 rounded-xl px-3 py-1 text-sm bg-white" onchange="switchBranch(this.value)">
+          {% for b in all_branches %}
+          <option value="{{ b.id }}" {% if b.id == branch.id %}selected{% endif %}>{{ b.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="flex gap-x-2">
+    <a href="{{ url_for('certificates') }}" class="px-4 py-2 text-xs border rounded-2xl flex items-center gap-x-2 hover:bg-white">
+      <i class="fa-solid fa-certificate"></i> Manage Certificates
+    </a>
+    <button onclick="clearSale()" class="px-5 py-2 text-xs border rounded-2xl hover:bg-white">Clear Sale</button>
+  </div>
+</div>
+
+<div class="grid grid-cols-1 lg:grid-cols-12 gap-5">
+  <!-- Products -->
+  <div class="lg:col-span-7 bg-white rounded-3xl p-5 border">
+    <input type="text" id="pos-search" onkeyup="filterProducts()" 
+           class="w-full border rounded-2xl px-4 py-2.5 mb-4 text-sm" placeholder="Search products or enter barcode...">
+
+    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-[520px] overflow-auto pr-1" id="product-list">
+      {% for p in products %}
+      <div class="pos-product flex justify-between items-center p-3 border rounded-2xl hover:bg-emerald-50 cursor-pointer" 
+           data-name="{{ p.name|lower }}" data-sku="{{ p.sku|lower }}" data-barcode="{{ p.barcode or '' }}"
+           onclick="addToSale({{ p.id }}, '{{ p.name }}', {{ p.price }}, '{{ p.sku }}', {{ p.tax_rate.rate if p.tax_rate else 15 }})">
+        <div class="min-w-0">
+          <div class="font-medium text-sm truncate">{{ p.name }}</div>
+          <div class="text-xs text-slate-500 font-mono">{{ p.sku }} • {{ p.barcode or 'No barcode' }}</div>
+          {% if p.tax_rate %}
+            <div class="text-[10px] mt-0.5">
+              <span class="px-1.5 py-px bg-blue-100 text-blue-700 rounded">{{ p.tax_rate.label }} {{ p.tax_rate.rate }}%</span>
+            </div>
+          {% endif %}
+        </div>
+        <div class="text-right ml-3">
+          <div class="font-semibold tabular-nums">FJD {{ "%.2f"|format(p.price) }}</div>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+
+  <!-- Current Sale -->
+  <div class="lg:col-span-5 bg-white rounded-3xl border p-5 flex flex-col">
+    <div class="font-semibold mb-3 flex items-center justify-between">
+      <span>Current Sale</span>
+      <span class="text-xs px-3 py-1 bg-slate-100 rounded-2xl">{{ branch.name.split()[0] }}</span>
+    </div>
+
+    <div id="current-sale" class="flex-1 overflow-auto text-sm space-y-2 min-h-[240px]"></div>
+
+    <!-- Totals -->
+    <div class="pt-4 border-t mt-auto">
+      <div class="space-y-1 text-sm mb-4">
+        <div class="flex justify-between text-slate-600">
+          <span>Subtotal (ex-VAT)</span>
+          <span id="sale-sub" class="tabular-nums">FJD 0.00</span>
+        </div>
+        <div class="flex justify-between text-slate-600">
+          <span>VAT (included)</span>
+          <span id="sale-vat" class="tabular-nums">FJD 0.00</span>
+        </div>
+        <div class="flex justify-between font-bold text-xl pt-2 border-t">
+          <span>Total (inc-VAT)</span>
+          <span id="sale-total" class="tabular-nums">FJD 0.00</span>
+        </div>
+      </div>
+
+      <!-- Customer / Debtor info -->
+      <div class="mb-3">
+        <div class="flex gap-2 mb-2">
+          <select id="debtor-select" class="flex-1 border rounded-2xl px-3 py-2 text-sm" onchange="selectDebtor(this)">
+            <option value="">Cash Sale / Walk-in</option>
+            {% for d in debtors %}
+            <option value="{{ d.id }}" data-balance="{{ d.outstanding_balance }}" data-name="{{ d.name }}" data-tin="{{ d.tin or '' }}">
+              {{ d.name }} (Balance: FJD {{ "%.2f"|format(d.outstanding_balance) }})
+            </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div id="debtor-info" class="hidden text-xs bg-blue-50 border border-blue-200 rounded-2xl px-3 py-2 mb-2">
+          <div><strong>Debtor:</strong> <span id="debtor-name"></span></div>
+          <div><strong>Current Balance:</strong> <span id="debtor-balance" class="font-semibold"></span></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <input id="customer-name" placeholder="Customer name (optional)" class="border rounded-2xl px-3 py-2 text-sm">
+          <input id="customer-tin" placeholder="Customer TIN (B2B)" class="border rounded-2xl px-3 py-2 text-sm font-mono">
+        </div>
+      </div>
+
+      <!-- Amount Tendered / Change -->
+      <div class="mb-3">
+        <label class="text-xs font-semibold text-slate-500">Amount Received (for change calculation)</label>
+        <input type="number" step="0.01" id="amount-received" 
+               class="w-full border rounded-2xl px-4 py-2 text-lg font-semibold tabular-nums focus:border-[#0A4D68]"
+               placeholder="Enter amount given by customer">
+        <div class="text-[10px] text-emerald-600 mt-0.5">Leave empty or equal to total for exact payment (no change).</div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-2" id="payment-buttons">
+        {% if active_payment_methods %}
+          {% for pm in active_payment_methods %}
+          <button onclick="completeSale('{{ pm.code }}')" 
+                  class="py-3 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold text-sm">
+            {{ pm.name }}
+          </button>
+          {% endfor %}
+        {% else %}
+          <!-- Fallback if no payment methods configured -->
+          <button onclick="completeSale('CASH')" class="py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-semibold text-sm">CASH</button>
+          <button onclick="completeSale('CARD')" class="py-3 bg-slate-800 hover:bg-black text-white rounded-2xl font-semibold text-sm">CARD</button>
+        {% endif %}
+      </div>
+      <div class="text-[10px] text-center text-emerald-600 mt-2 font-medium">Every sale is digitally signed &amp; sent to FRCS VMS</div>
+    </div>
+  </div>
+</div>
+
+<!-- Fiscal Success Modal -->
+<div id="fiscal-modal" class="hidden fixed inset-0 bg-black/70 z-[120] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl overflow-hidden">
+    <div class="bg-[#0A4D68] text-white p-5">
+      <div class="uppercase text-xs tracking-widest">FIJI REVENUE &amp; CUSTOMS SERVICE</div>
+      <div class="text-2xl font-bold">FISCAL INVOICE ISSUED</div>
+    </div>
+    <div id="fiscal-content" class="p-6 text-sm fiscal-box"></div>
+    <div class="p-4 flex gap-2 bg-slate-50">
+      <button onclick="closeFiscalModal()" class="flex-1 py-2.5 border rounded-2xl">Close</button>
+      <button onclick="printFiscal()" class="flex-1 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-medium">Print Receipt</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Due Screen -->
+<div id="change-modal" class="hidden fixed inset-0 bg-black/80 z-[130] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl overflow-hidden shadow-2xl">
+    <div class="bg-emerald-600 text-white p-6 text-center">
+      <div class="text-sm uppercase tracking-[2px]">Thank You!</div>
+      <div class="text-3xl font-bold mt-1">CHANGE DUE</div>
+    </div>
+    
+    <div class="p-8 text-center">
+      <div class="text-6xl font-bold tabular-nums text-emerald-700" id="change-amount">FJD 0.00</div>
+      <div class="mt-2 text-slate-500">Please give the customer the above amount</div>
+    </div>
+
+    <div class="p-4 bg-slate-50 flex gap-3">
+      <button onclick="closeChangeModal()" 
+              class="flex-1 py-3 border rounded-2xl font-semibold">Close</button>
+      <button onclick="printReceiptFromChange()" 
+              class="flex-1 py-3 bg-[#0A4D68] text-white rounded-2xl font-semibold">
+        Print Receipt
+      </button>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+let currentSale = [];
+let currentBranchId = {{ branch.id }};
+let specialPricingMap = {};   // product_id -> {adjusted_price, applied_rule}
+
+function switchBranch(newBranchId) {
+  currentBranchId = parseInt(newBranchId);
+  
+  // Update header display
+  const branchSelect = document.getElementById('branch-switcher');
+  if (branchSelect) {
+    const selectedOption = branchSelect.options[branchSelect.selectedIndex];
+    document.getElementById('current-branch-name').innerHTML = selectedOption.text + ' • Switching...';
+  }
+
+  // Recalculate special pricing for the new branch
+  recalculateSpecialPricing().then(() => {
+    // Optional: reload certificate status for new branch (simplified)
+    location.reload(); // simplest reliable way for now
+  });
+}
+
+async function recalculateSpecialPricing() {
+  if (currentSale.length === 0) {
+    specialPricingMap = {};
+    renderSale();
+    return;
+  }
+
+  const cart = currentSale.map(i => ({
+    product_id: i.id,
+    qty: i.qty,
+    original_price: i.price
+  }));
+
+  try {
+    const res = await fetch('/api/pos/calculate-special-pricing', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ 
+        cart: cart,
+        branch_id: currentBranchId 
+      })
+    });
+    const data = await res.json();
+    if (data.success) {
+      specialPricingMap = {};
+      data.items.forEach(item => {
+        specialPricingMap[item.product_id] = {
+          adjusted_price: item.adjusted_price,
+          applied_rule: item.applied_rule
+        };
+      });
+    }
+  } catch (e) {
+    console.error('Special pricing calculation failed', e);
+  }
+  renderSale();
+}
+
+function filterProducts() {
+  const term = document.getElementById('pos-search').value.toLowerCase().trim();
+  document.querySelectorAll('#product-list > div').forEach(el => {
+    const match = el.dataset.name.includes(term) || el.dataset.sku.includes(term) || el.dataset.barcode.includes(term);
+    el.style.display = match ? '' : 'none';
+  });
+}
+
+// When user presses Enter in search and it looks like a barcode, try server lookup first
+document.addEventListener('DOMContentLoaded', () => {
+  const searchInput = document.getElementById('pos-search');
+  if (searchInput) {
+    searchInput.addEventListener('keypress', async function(e) {
+      if (e.key === 'Enter') {
+        const val = searchInput.value.trim();
+        // If it looks like a barcode (digits or long enough), try server lookup for pack qty
+        if (val.length > 3 && /^\d+$/.test(val)) {
+          const handled = await addItemByBarcode(val);
+          if (handled) {
+            searchInput.value = '';
+            e.preventDefault();
+          }
+        }
+      }
+    });
+  }
+});
+
+function addToSale(id, name, price, sku, taxRate = 15) {
+  const existing = currentSale.findIndex(i => i.id === id);
+  if (existing >= 0) {
+    currentSale[existing].qty++;
+  } else {
+    currentSale.push({id, name, price, sku, qty: 1, taxRate: taxRate || 15});
+  }
+  recalculateSpecialPricing();
+}
+
+function renderSale() {
+  const container = document.getElementById('current-sale');
+  container.innerHTML = '';
+
+  if (currentSale.length === 0) {
+    container.innerHTML = `<div class="h-40 flex items-center justify-center text-slate-400"><div class="text-center"><i class="fa-solid fa-receipt text-4xl mb-2"></i><div>No items</div></div></div>`;
+    updateTotals(0);
+    return;
+  }
+
+  let subtotal = 0;
+  currentSale.forEach((item, idx) => {
+    const special = specialPricingMap[item.id];
+    const displayPrice = special ? special.adjusted_price : item.price;
+    const line = displayPrice * item.qty;
+    subtotal += line;
+
+    const row = document.createElement('div');
+    row.className = 'flex justify-between border-b pb-2.5 text-sm cursor-pointer hover:bg-slate-50';
+    row.onclick = () => showItemSpecialInfo(idx);
+
+    let priceHtml = `FJD ${line.toFixed(2)}`;
+    if (special && special.applied_rule) {
+      priceHtml = `<span class="text-emerald-600 font-semibold">FJD ${line.toFixed(2)}</span>`;
+    }
+
+    row.innerHTML = `
+      <div class="flex-1 pr-3">
+        <div class="font-medium">${item.name}</div>
+        <div class="flex items-center gap-x-2 text-xs mt-0.5">
+          <button onclick="event.stopImmediatePropagation(); changeQty(${idx}, -1)" class="px-1.5 border rounded">-</button>
+          <span class="font-mono w-5 text-center">${item.qty}</span>
+          <button onclick="event.stopImmediatePropagation(); changeQty(${idx}, 1)" class="px-1.5 border rounded">+</button>
+          <span class="text-slate-500">${item.sku}</span>
+          ${special && special.applied_rule ? `<span class="ml-1 text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">SPECIAL</span>` : ''}
+        </div>
+      </div>
+      <div class="text-right">
+        <div class="font-semibold tabular-nums">${priceHtml}</div>
+        <button onclick="event.stopImmediatePropagation(); removeItem(${idx})" class="text-red-400 text-xs">remove</button>
+      </div>
+    `;
+    container.appendChild(row);
+  });
+
+  // Calculate using per-item tax rates (much more accurate for mixed tax items)
+  let totalVatIncluded = 0;
+  currentSale.forEach(item => {
+    const rate = (item.taxRate || 15) / 100;
+    const lineVip = (specialPricingMap[item.id] ? specialPricingMap[item.id].adjusted_price : item.price) * item.qty;
+    const lineVep = lineVip / (1 + rate);
+    totalVatIncluded += (lineVip - lineVep);
+  });
+
+  const vipTotal = subtotal;
+  const vatIncluded = totalVatIncluded;
+
+  updateTotals(vipTotal, vatIncluded);
+}
+
+function showItemSpecialInfo(idx) {
+  const item = currentSale[idx];
+  const special = specialPricingMap[item.id];
+
+  let html = `<strong>${item.name}</strong><br>Selling Price (Inc Tax): FJD ${item.price.toFixed(2)} × ${item.qty}`;
+
+  if (special && special.applied_rule) {
+    html += `<br><br><span class="text-emerald-600 font-semibold">★ SPECIAL PRICING APPLIED</span><br>`;
+    html += `<strong>${special.applied_rule.name || 'Special Rule'}</strong><br>`;
+    if (special.applied_rule.branch_specific) {
+      html += `<span class="text-blue-600 text-xs">(This branch only)</span><br>`;
+    }
+    html += `${special.applied_rule.description || ''}<br>`;
+    html += `Effective unit price: <strong>FJD ${special.adjusted_price.toFixed(2)}</strong>`;
+  } else {
+    html += `<br><br>No special pricing applied for this branch.`;
+  }
+
+  const modal = document.createElement('div');
+  modal.className = 'fixed inset-0 bg-black/60 z-[180] flex items-center justify-center p-4';
+  modal.innerHTML = `
+    <div class="bg-white w-full max-w-sm rounded-3xl p-6 text-sm">
+      <div class="mb-4">${html}</div>
+      <button onclick="this.closest('.fixed').remove()" 
+              class="w-full py-2.5 bg-slate-800 text-white rounded-2xl">Close</button>
+    </div>
+  `;
+  document.body.appendChild(modal);
+}
+
+function changeQty(idx, delta) {
+  currentSale[idx].qty = Math.max(1, currentSale[idx].qty + delta);
+  renderSale();
+}
+
+function removeItem(idx) {
+  currentSale.splice(idx, 1);
+  renderSale();
+}
+
+function updateTotals(vipTotal, vatIncluded = null) {
+  // vipTotal = final amount customer pays (tax inclusive)
+  // vatIncluded = the tax portion already included in the vipTotal
+  // Note: Real per-line tax uses the rate assigned to each product (see backend).
+  const rate = 0.15;
+  if (vatIncluded === null) {
+    vatIncluded = vipTotal * rate / (1 + rate);
+  }
+  const exVatSubtotal = vipTotal - vatIncluded;
+
+  document.getElementById('sale-sub').textContent = `FJD ${exVatSubtotal.toFixed(2)}`;
+  document.getElementById('sale-vat').textContent = `FJD ${vatIncluded.toFixed(2)}`;
+  document.getElementById('sale-total').textContent = `FJD ${vipTotal.toFixed(2)}`;
+}
+
+function selectDebtor(select) {
+  const infoBox = document.getElementById('debtor-info');
+  const nameField = document.getElementById('customer-name');
+  const tinField = document.getElementById('customer-tin');
+
+  if (!select.value) {
+    infoBox.classList.add('hidden');
+    return;
+  }
+
+  const selected = select.options[select.selectedIndex];
+  const fallbackBalance = parseFloat(selected.dataset.balance) || 0;
+  const name = selected.dataset.name || selected.textContent.split(' (')[0];
+  const tin = selected.dataset.tin || '';
+
+  // Show immediately with static (fast UX)
+  document.getElementById('debtor-name').textContent = name;
+  document.getElementById('debtor-balance').textContent = `FJD ${fallbackBalance.toFixed(2)} (loading...)`;
+  infoBox.classList.remove('hidden');
+  nameField.value = name;
+  if (tin) tinField.value = tin;
+
+  // Live fetch for accurate current balance + full details
+  fetch(`/api/debtor/${select.value}/balance`)
+    .then(r => r.json())
+    .then(d => {
+      if (d.success) {
+        document.getElementById('debtor-name').textContent = d.name;
+        document.getElementById('debtor-balance').innerHTML = `FJD ${d.outstanding_balance.toFixed(2)} <span class="text-[10px] text-slate-500">(live)</span>`;
+        // Optionally show more details in future expansion of panel
+        if (d.tin && !tinField.value) tinField.value = d.tin;
+      }
+    })
+    .catch(() => {
+      // keep fallback
+      document.getElementById('debtor-balance').textContent = `FJD ${fallbackBalance.toFixed(2)}`;
+    });
+}
+
+function clearSale() {
+  currentSale = [];
+  renderSale();
+}
+
+async function completeSale(method) {
+  if (currentSale.length === 0) return alert("Add items to the sale first");
+
+  const debtorSelect = document.getElementById('debtor-select');
+  const amountReceivedInput = document.getElementById('amount-received');
+  const tendered = amountReceivedInput && amountReceivedInput.value ? parseFloat(amountReceivedInput.value) : null;
+
+  const payload = {
+    branch_id: currentBranchId,
+    items: currentSale.map(i => {
+      const special = specialPricingMap[i.id];
+      return {
+        product_id: i.id,
+        quantity: i.qty,
+        price: special ? special.adjusted_price : i.price
+      };
+    }),
+    customer_name: document.getElementById('customer-name').value,
+    customer_tin: document.getElementById('customer-tin').value,
+    debtor_id: debtorSelect && debtorSelect.value ? parseInt(debtorSelect.value) : null,
+    payment_method: method,
+    tendered_amount: tendered   // for change calculation
+  };
+
+  const res = await fetch('/api/pos/create-sale', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    // Show Change Due screen first if applicable
+    if (data.change_due !== undefined && data.change_due > 0) {
+      showChangeDueScreen(data.change_due, data);
+    } else {
+      showFiscalSuccess(data);
+    }
+    currentSale = [];
+    renderSale();
+    if (amountReceivedInput) amountReceivedInput.value = '';
+    document.getElementById('customer-name').value = '';
+    document.getElementById('customer-tin').value = '';
+  } else {
+    showToast(data.message || 'Sale failed', 'error');
+  }
+}
+
+function showFiscalSuccess(data) {
+  const modal = document.getElementById('fiscal-modal');
+  const content = document.getElementById('fiscal-content');
+  const f = data.fiscal || {};
+  const orderId = data.order_id;
+
+  content.innerHTML = `
+    <div class="space-y-3 text-sm">
+      <div><span class="font-semibold">SDC Invoice No:</span> <span class="font-mono">${f.sdc_no || f.invoice_no}</span></div>
+      <div><span class="font-semibold">Signature (from FRCS Secure Element):</span><br><span class="font-mono text-[10px] break-all">${f.signature}</span></div>
+      <div class="pt-2 text-emerald-600 font-medium flex items-center gap-x-2">
+        <i class="fa-solid fa-check-circle"></i> 
+        <span>Successfully fiscalized with FRCS VMS (data returned by API)</span>
+      </div>
+    </div>
+    <div class="mt-4">
+      <a href="/receipt/pdf/${orderId}" target="_blank"
+         class="block text-center w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-semibold">
+        Download Official FRCS PDF Receipt
+      </a>
+    </div>
+  `;
+  modal.classList.remove('hidden');
+  modal.dataset.orderId = orderId;
+}
+
+function closeFiscalModal() {
+  document.getElementById('fiscal-modal').classList.add('hidden');
+}
+
+function printFiscal() {
+  window.print();
+}
+
+// ===== Change Due Screen =====
+let lastSaleDataForReceipt = null;
+
+function showChangeDueScreen(changeDue, saleData) {
+  lastSaleDataForReceipt = saleData;
+  const modal = document.getElementById('change-modal');
+  document.getElementById('change-amount').textContent = `FJD ${changeDue.toFixed(2)}`;
+  modal.classList.remove('hidden');
+}
+
+function closeChangeModal() {
+  document.getElementById('change-modal').classList.add('hidden');
+  // Show the normal fiscal success after closing change screen
+  if (lastSaleDataForReceipt) {
+    showFiscalSuccess(lastSaleDataForReceipt);
+    lastSaleDataForReceipt = null;
+  }
+}
+
+function printReceiptFromChange() {
+  if (lastSaleDataForReceipt && lastSaleDataForReceipt.order_id) {
+    window.open(`/receipt/pdf/${lastSaleDataForReceipt.order_id}`, '_blank');
+  }
+  closeChangeModal();
+}
+</script>
+{% endblock %}
