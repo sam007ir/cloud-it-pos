@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-FRCS VMS POS System - Production Ready
+Cloud IT POS System - Production Ready
 Fiji Revenue & Customs Service VAT Monitoring System
 
 This is a fresh-install system. On first run with no users,
@@ -22,7 +22,7 @@ if sys.platform == "win32":
 
 def main():
     print("\n" + "=" * 72)
-    print("   FRCS VMS POS + INVENTORY + SALES + FISCAL SYSTEM")
+    print("   Cloud IT POS + INVENTORY + SALES + FISCAL SYSTEM")
     print("         Fiji Revenue & Customs Service - Ready")
     print("=" * 72)
 

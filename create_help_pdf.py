@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Generate updated FRCS VMS POS User Guide PDF
+Generate updated Cloud IT POS User Guide PDF
 Includes new features: Departments + Excel Import + Debtors + Invoice Entry + Stock History
 """
 
@@ -11,7 +11,7 @@ class UserGuidePDF(FPDF):
     def header(self):
         self.set_font("Helvetica", "B", 9)
         self.set_text_color(10, 77, 104)
-        self.cell(0, 6, "FRCS VMS POS - Complete User Guide", ln=True, align="C")
+        self.cell(0, 6, "Cloud IT POS - Complete User Guide", ln=True, align="C")
         self.set_draw_color(10, 77, 104)
         self.line(10, 12, 200, 12)
         self.ln(4)
@@ -20,7 +20,7 @@ class UserGuidePDF(FPDF):
         self.set_y(-15)
         self.set_font("Helvetica", "I", 7)
         self.set_text_color(128)
-        self.cell(0, 10, f"Page {self.page_no()} | FRCS VMS POS System - Fiji Revenue & Customs Service", align="C")
+        self.cell(0, 10, f"Page {self.page_no()} | Cloud IT POS System - Fiji Revenue & Customs Service", align="C")
 
 
 def create_user_guide():
@@ -31,7 +31,7 @@ def create_user_guide():
     # Title
     pdf.set_font("Helvetica", "B", 18)
     pdf.set_text_color(10, 77, 104)
-    pdf.cell(0, 11, "FRCS VMS POS System", ln=True, align="C")
+    pdf.cell(0, 11, "Cloud IT POS System", ln=True, align="C")
     pdf.set_font("Helvetica", "", 11)
     pdf.set_text_color(70)
     pdf.cell(0, 6, "Complete User Guide - Fresh Install Version", ln=True, align="C")
