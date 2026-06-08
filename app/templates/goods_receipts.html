@@ -46,10 +46,14 @@
         </td>
         <td class="px-5 py-3 text-xs text-slate-500">{{ gr.notes or '' }}</td>
         <td class="px-4 py-3">
-          {% if not gr.is_reversed and user.role == 'admin' %}
+          {% if not gr.is_reversed and (user.role == 'admin' or user.role == 'manager') %}
           <button onclick="reverseGoodsReceipt({{ gr.id }}, this)" 
-                  class="text-xs px-3 py-1 border border-red-300 text-red-600 hover:bg-red-50 rounded-xl">
+                  class="text-xs px-3 py-1 border border-red-300 text-red-600 hover:bg-red-50 rounded-xl mr-1">
             Reverse
+          </button>
+          <button onclick="returnToSupplier({{ gr.id }}, this)" 
+                  class="text-xs px-3 py-1 border border-amber-300 text-amber-600 hover:bg-amber-50 rounded-xl">
+            Return to Supplier
           </button>
           {% elif gr.is_reversed %}
           <span class="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded">Reversed</span>
@@ -87,6 +91,60 @@ async function reverseGoodsReceipt(grId, button) {
     alert('Failed: ' + (data.message || 'Unknown error'));
     button.disabled = false;
     button.textContent = 'Reverse';
+  }
+}
+
+async function returnToSupplier(grId, button) {
+  const qtyStr = prompt('Enter quantity to return to supplier (will reduce stock and record the return):', '1');
+  if (!qtyStr) return;
+  const qty = parseInt(qtyStr);
+  if (!qty || qty <= 0) {
+    alert('Invalid quantity');
+    return;
+  }
+  const reason = prompt('Reason for return (optional):', 'Damaged / Wrong items') || 'Return to supplier';
+
+  // For simplicity we use the first item in the GR for product/branch; in real use you would select specific items
+  // Here we call a general supplier return (you can enhance to pass specific product from the GR row)
+  // To make it work against the GR, we pass gr_id and let backend handle. But for stock we need product/branch.
+  // Since the row has items, for this demo we'll pick the first item's product. 
+  // A better UI would list items with qtys to return.
+  button.disabled = true;
+  button.textContent = 'Processing...';
+
+  // We need product and branch. Since the template lists items, we can hardcode a call that requires more data.
+  // For a practical implementation, we'll make the API flexible. Here we fetch the GR details first or use known.
+  // To keep it simple and working immediately: the button will ask for product_id too in prompt for now.
+  // Better: since we have grId, we can have the backend lookup, but for this we will use a general call and prompt product.
+  const productId = prompt('Product ID to return (from the items above):');
+  const branchId = prompt('Branch ID:', '1');
+
+  if (!productId || !branchId) {
+    button.disabled = false;
+    button.textContent = 'Return to Supplier';
+    return;
+  }
+
+  const res = await fetch('/api/supplier-return', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      product_id: parseInt(productId),
+      branch_id: parseInt(branchId),
+      quantity: qty,
+      reason: reason,
+      goods_receipt_id: grId
+    })
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast(data.message);
+    setTimeout(() => location.reload(), 800);
+  } else {
+    alert('Failed: ' + (data.message || 'Unknown error'));
+    button.disabled = false;
+    button.textContent = 'Return to Supplier';
   }
 }
 </script>

@@ -5,74 +5,225 @@
 {% block content %}
 <h1 class="text-3xl font-semibold mb-6">Debtors (Accounts Receivable)</h1>
 
+<div class="flex gap-2 mb-4">
+  <button onclick="downloadDebtorTemplate()" class="px-4 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+    <i class="fa-solid fa-download"></i> Download Import Template
+  </button>
+  <button onclick="showDebtorImportModal()" class="px-4 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+    <i class="fa-solid fa-file-excel"></i> Import Excel
+  </button>
+</div>
+
+<div id="debtor-import-modal" class="hidden fixed inset-0 bg-black/70 z-[145] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl p-6">
+    <div class="font-semibold mb-4">Import Debtors from Excel</div>
+    <input type="file" id="debtor-excel-file" accept=".xlsx" class="w-full border rounded-2xl p-3 text-sm mb-4">
+    <div class="flex gap-2">
+      <button onclick="hideDebtorImportModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+      <button onclick="importDebtorsExcel()" class="flex-1 py-2.5 bg-emerald-600 text-white rounded-2xl">Import</button>
+    </div>
+    <div id="debtor-import-status" class="mt-3 text-xs text-center hidden"></div>
+  </div>
+</div>
+
+<div class="mb-3">
+  <input type="text" id="debtor-list-search" onkeyup="filterDebtorList()" 
+         class="w-full max-w-sm border rounded-2xl px-4 py-2 text-sm" placeholder="Search this list (name, code, phone, category...)">
+</div>
+
 <div class="bg-white rounded-3xl border p-6 mb-6">
   <div class="font-semibold mb-3 text-sm">Add New Debtor (for credit / on-account sales)</div>
-  <form id="debtor-form" onsubmit="createDebtor(event)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 text-sm">
+  <form id="debtor-form" onsubmit="createDebtor(event)" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 text-sm">
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Main Code (auto if blank)</label>
+      <input id="d-main-code" placeholder="CUST-0001" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Second Code</label>
+      <input id="d-second-code" class="w-full border rounded-2xl px-4 py-2.5 font-mono focus:outline-none focus:border-[#0A4D68]">
+    </div>
     <div>
       <label class="block text-xs font-medium text-slate-600 mb-1">Full Name / Company *</label>
       <input id="d-name" required class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-600 mb-1">TIN (optional)</label>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Contact Person</label>
+      <input id="d-contact" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">TIN</label>
       <input id="d-tin" class="w-full border rounded-2xl px-4 py-2.5 font-mono focus:outline-none focus:border-[#0A4D68]">
     </div>
     <div>
-      <label class="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Phone 1</label>
       <input id="d-phone" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Phone 2</label>
+      <input id="d-phone2" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
     </div>
     <div>
       <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
       <input id="d-email" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
     </div>
-    <div class="lg:col-span-4">
-      <label class="block text-xs font-medium text-slate-600 mb-1">Address</label>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Category</label>
+      <input id="d-category" placeholder="Retail / Wholesale" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div>
+      <label class="block text-xs font-medium text-slate-600 mb-1">Discount Group</label>
+      <input id="d-discount-group" placeholder="For special pricing" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div class="lg:col-span-2">
+      <label class="block text-xs font-medium text-slate-600 mb-1">Address Line 1</label>
       <input id="d-address" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
     </div>
-    <div class="lg:col-span-1 flex items-end">
-      <button type="submit" class="w-full px-4 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold transition">Add Debtor</button>
+    <div class="lg:col-span-2">
+      <label class="block text-xs font-medium text-slate-600 mb-1">Address Line 2</label>
+      <input id="d-address2" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div class="lg:col-span-2">
+      <label class="block text-xs font-medium text-slate-600 mb-1">Address Line 3</label>
+      <input id="d-address3" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+    </div>
+    <div class="lg:col-span-6 flex items-end justify-end">
+      <button type="submit" class="px-8 py-2.5 bg-[#0A4D68] hover:bg-[#08374d] text-white rounded-2xl font-semibold transition">Add Debtor</button>
     </div>
   </form>
 </div>
 
 <div class="bg-white rounded-3xl border p-6">
+  <div class="mb-3">
+    <input type="text" id="debtor-list-search" onkeyup="filterDebtorList()" 
+           class="w-full max-w-sm border rounded-2xl px-4 py-2 text-sm" placeholder="Filter list: name, code, phone, category...">
+  </div>
   <table class="w-full text-sm">
-    <thead><tr class="bg-slate-50"><th>Name</th><th>TIN</th><th>Phone</th><th>Outstanding Balance</th></tr></thead>
+    <thead>
+      <tr class="bg-slate-50">
+        <th class="text-left px-3">Code</th>
+        <th class="text-left px-3">Name / Contact</th>
+        <th>Phone(s)</th>
+        <th class="text-left">Address</th>
+        <th>Category / Group</th>
+        <th>Outstanding Balance</th>
+        <th></th>
+      </tr>
+    </thead>
     <tbody>
       {% for d in debtors %}
       <tr class="border-b">
-        <td class="py-1.5">{{ d.name }}</td>
-        <td>{{ d.tin or '-' }}</td>
-        <td>{{ d.phone or '-' }}</td>
+        <td class="py-1.5 font-mono text-xs">{{ d.main_code or '-' }}<br><span class="text-[10px] text-slate-400">{{ d.second_code or '' }}</span></td>
+        <td>{{ d.name }}<br><span class="text-xs text-slate-500">{{ d.contact_person or '' }}</span></td>
+        <td class="text-xs">{{ d.phone or '' }}{% if d.phone2 %}<br>{{ d.phone2 }}{% endif %}</td>
+        <td class="text-xs text-slate-600">{{ d.address or '' }}{% if d.address2 %}<br>{{ d.address2 }}{% endif %}{% if d.address3 %}<br>{{ d.address3 }}{% endif %}</td>
+        <td class="text-xs">{{ d.category or '' }}{% if d.discount_group %}<br><span class="text-emerald-600">{{ d.discount_group }}</span>{% endif %}</td>
         <td class="font-semibold tabular-nums">FJD {{ "%.2f"|format(d.outstanding_balance) }}</td>
+        <td>
+          <button onclick="recordDebtorPayment({{ d.id }}, '{{ d.name }}', {{ d.outstanding_balance or 0 }})"
+                  class="text-xs px-3 py-1 border border-emerald-300 text-emerald-700 rounded-2xl hover:bg-emerald-50">Record Payment</button>
+        </td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="text-center py-6 text-slate-400">No debtors recorded yet. Add one above to enable credit sales in POS / Invoice Entry.</td></tr>
+      <tr><td colspan="7" class="text-center py-6 text-slate-400">No debtors recorded yet. Add one above to enable credit sales in POS (select DEBTOR / ON_ACCOUNT payment).</td></tr>
       {% endfor %}
     </tbody>
   </table>
-  <div class="mt-3 text-xs text-slate-500">Balances update automatically from POS credit sales and manual Invoice Entry.</div>
+  <div class="mt-3 text-xs text-slate-500">Balances update from credit sales (POS), credit notes/returns, and manual payments recorded above. Use "Record Payment" to reduce AR and (optionally) generate an audit receipt. (Supplier invoices add stock via separate Purchasing flow and do not affect debtors.)</div>
 </div>
 
 <script>
 async function createDebtor(e) {
   e.preventDefault();
   const payload = {
+    main_code: document.getElementById('d-main-code').value,
+    second_code: document.getElementById('d-second-code').value,
     name: document.getElementById('d-name').value,
+    contact_person: document.getElementById('d-contact').value,
     tin: document.getElementById('d-tin').value,
     phone: document.getElementById('d-phone').value,
+    phone2: document.getElementById('d-phone2').value,
     email: document.getElementById('d-email').value,
-    address: document.getElementById('d-address').value
+    address: document.getElementById('d-address').value,
+    address2: document.getElementById('d-address2').value,
+    address3: document.getElementById('d-address3').value,
+    category: document.getElementById('d-category').value,
+    discount_group: document.getElementById('d-discount-group').value
   };
   const res = await fetch('/api/debtors', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(payload)});
   const data = await res.json();
   if (data.success) {
-    showToast('Debtor added successfully');
+    showToast('Debtor added successfully' + (data.main_code ? ' (' + data.main_code + ')' : ''));
     // Clear form
     document.getElementById('debtor-form').reset();
-    // Refresh list so new debtor appears immediately for POS / Invoice Entry
+    // Refresh list so new debtor appears immediately for POS (debtor payment mode)
     setTimeout(() => location.reload(), 1200);
   } else {
     showToast(data.message || 'Error creating debtor', 'error');
+  }
+}
+
+async function recordDebtorPayment(debtorId, debtorName, currentBal) {
+  const amtStr = prompt(`Record payment for ${debtorName}\nCurrent balance: FJD ${currentBal.toFixed(2)}\n\nEnter payment amount (FJD):`, '');
+  if (!amtStr) return;
+  const amount = parseFloat(amtStr);
+  if (!amount || amount <= 0) { alert('Invalid amount'); return; }
+  const notes = prompt('Notes (optional):', 'Payment received');
+  const doFiscal = confirm('Also create a mini fiscal payment receipt for audit? (recommended)');
+  const res = await fetch(`/api/debtors/${debtorId}/payment`, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ amount, notes: notes || 'Payment received', fiscalize: doFiscal })
+  });
+  const data = await res.json();
+  if (data.success) {
+    showToast(data.message || 'Payment recorded');
+    setTimeout(() => location.reload(), 800);
+  } else {
+    showToast(data.message || 'Failed', 'error');
+  }
+}
+
+function downloadDebtorTemplate() {
+  window.location.href = '/api/debtors/import-template';
+}
+
+function showDebtorImportModal() {
+  document.getElementById('debtor-import-modal').classList.remove('hidden');
+  document.getElementById('debtor-import-status').classList.add('hidden');
+  document.getElementById('debtor-excel-file').value = '';
+}
+
+function filterDebtorList() {
+  const term = (document.getElementById('debtor-list-search') || {}).value.toLowerCase().trim() || '';
+  document.querySelectorAll('.bg-white.rounded-3xl.border.p-6 table tbody tr').forEach(tr => {
+    const txt = (tr.textContent || '').toLowerCase();
+    tr.style.display = !term || txt.includes(term) ? '' : 'none';
+  });
+}
+
+function hideDebtorImportModal() {
+  document.getElementById('debtor-import-modal').classList.add('hidden');
+}
+
+async function importDebtorsExcel() {
+  const fileInput = document.getElementById('debtor-excel-file');
+  const statusEl = document.getElementById('debtor-import-status');
+  if (!fileInput.files.length) return alert('Select a file');
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  statusEl.textContent = 'Importing...';
+  statusEl.classList.remove('hidden');
+
+  const res = await fetch('/api/debtors/import-excel', { method: 'POST', body: formData });
+  const data = await res.json();
+
+  if (data.success) {
+    statusEl.textContent = `Success! Imported/updated ${data.imported} debtors.`;
+    setTimeout(() => { hideDebtorImportModal(); location.reload(); }, 1200);
+  } else {
+    statusEl.textContent = 'Error: ' + (data.message || 'Import failed');
   }
 }
 </script>

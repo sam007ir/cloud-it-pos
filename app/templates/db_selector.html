@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Choose Database • Cloud IT POS</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+</head>
+<body class="bg-slate-950 flex items-center justify-center min-h-screen py-10">
+  <div class="w-full max-w-3xl px-6">
+    <!-- Header -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-4">
+        <i class="fa-solid fa-database text-3xl text-[#0A4D68]"></i>
+      </div>
+      <h1 class="text-white text-3xl font-semibold tracking-tighter">Cloud IT POS</h1>
+      <p class="text-slate-400 mt-1">Choose your database / company</p>
+    </div>
+
+    <div class="bg-white rounded-3xl shadow-2xl p-8">
+      <div class="mb-6">
+        <div class="flex items-center gap-x-3">
+          <div class="px-3 py-1 bg-emerald-100 text-emerald-700 text-xs font-bold rounded-full">DATABASE SELECTOR</div>
+          <div class="text-xl font-semibold">Select Database or Create New</div>
+        </div>
+        <p class="text-slate-500 text-sm mt-1">Each database is completely independent (separate inventory, sales, tenants, users, settings, etc). You can run multiple businesses or keep test/prod copies.</p>
+      </div>
+
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="mb-4 text-sm px-4 py-2.5 rounded-2xl {{ 'bg-red-100 text-red-700' if category=='error' else 'bg-emerald-100 text-emerald-700' }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      <!-- Existing Databases -->
+      <div class="mb-2 text-sm font-semibold text-slate-700 flex items-center gap-2">
+        <i class="fa-solid fa-list"></i>
+        <span>Existing Databases in instance/</span>
+      </div>
+
+      {% if databases and databases|length > 0 %}
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+          {% for db in databases %}
+            <div class="border rounded-2xl p-4 hover:border-[#0A4D68] transition {{ 'ring-2 ring-[#0A4D68] bg-slate-50' if db.is_current else '' }}">
+              <div class="flex items-start justify-between">
+                <div>
+                  <div class="font-semibold text-lg flex items-center gap-2">
+                    {{ db.display_name }}
+                    {% if db.is_default %}<span class="text-[10px] px-1.5 py-0.5 bg-slate-200 text-slate-600 rounded">DEFAULT</span>{% endif %}
+                    {% if db.is_current %}<span class="text-[10px] px-1.5 py-0.5 bg-emerald-100 text-emerald-700 rounded">CURRENT</span>{% endif %}
+                  </div>
+                  <div class="text-xs text-slate-500 mt-0.5 font-mono">{{ db.name }} • {{ db.size_human }} • last modified {{ db.mtime }}</div>
+                </div>
+                <i class="fa-solid fa-database text-xl text-slate-300 mt-1"></i>
+              </div>
+
+              <form method="POST" class="mt-3">
+                <input type="hidden" name="action" value="select">
+                <input type="hidden" name="db_name" value="{{ db.name }}">
+                <button type="submit"
+                        class="w-full py-2 text-sm font-semibold rounded-2xl transition {{ 'bg-[#0A4D68] text-white hover:bg-[#08374d]' if not db.is_current else 'bg-emerald-600 text-white hover:bg-emerald-700' }}">
+                  {% if db.is_current %}Using this database{% else %}Use this database{% endif %}
+                </button>
+              </form>
+            </div>
+          {% endfor %}
+        </div>
+      {% else %}
+        <div class="border border-dashed rounded-2xl p-6 text-center text-sm text-slate-500 mb-6">
+          No existing .db files found yet. Create your first database below.
+        </div>
+      {% endif %}
+
+      <!-- Create New -->
+      <div class="pt-6 border-t">
+        <div class="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-x-2">
+          <i class="fa-solid fa-plus-circle"></i>
+          <span>Create a brand new database</span>
+        </div>
+        <p class="text-xs text-slate-500 mb-3">
+          We will auto-generate an <strong>ID</strong> (e.g. <span class="font-mono">db_20260608_150123</span> — this becomes the internal filename and technical identifier).
+          Enter the <strong>name</strong> you want to use for this database below. It will be shown prominently in the list.
+        </p>
+
+        <!-- Quick Create with name input (auto ID + your name) -->
+        <form method="POST">
+          <input type="hidden" name="action" value="create">
+          <div class="flex flex-col md:flex-row gap-3 items-end">
+            <div class="flex-1">
+              <label class="block text-xs font-semibold text-slate-600 mb-1">Database Name (what you call it)</label>
+              <input type="text" name="new_db_name" placeholder="e.g. Main Store or Test Branch"
+                     class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+            </div>
+            <button type="submit"
+                    class="px-8 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded-2xl text-sm whitespace-nowrap">
+              Create New Database &amp; Start Setup
+            </button>
+          </div>
+          <div class="text-[10px] text-slate-400 mt-1">Auto ID (filename) is always generated automatically. The name you enter is for display and reference.</div>
+        </form>
+      </div>
+
+      <div class="mt-6 pt-4 border-t text-xs text-slate-400">
+        <div class="flex items-start gap-2">
+          <i class="fa-solid fa-info-circle mt-0.5"></i>
+          <div>
+            Databases live as separate files in the <code class="bg-slate-100 px-1 rounded">instance/</code> folder next to this app.<br>
+            You can copy/backup/rename .db files manually (while app is stopped). Switching here changes the active data set for this session.
+          </div>
+        </div>
+      </div>
+
+      <div class="mt-4 text-center">
+        <a href="{{ url_for('login') }}" class="text-sm text-[#0A4D68] hover:underline">Skip to login (uses default or last chosen)</a>
+      </div>
+    </div>
+
+    <div class="text-center text-slate-500 text-xs mt-6">
+      Production system for FRCS VAT Monitoring System compliance • Multiple company / branch databases supported
+    </div>
+  </div>
+</body>
+</html>

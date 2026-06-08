@@ -17,7 +17,7 @@
       <li>• <strong>Barcode First + Alternate Barcodes</strong> — Barcode compulsory, SKU optional (AUTO- generated). Support pack sizes (e.g. carton of 6)</li>
       <li>• <strong>VMS Mode Toggle</strong> — Switch between Simulation and Real VSDC (sandbox supported) per branch certificate</li>
       <li>• <strong>Live Debtor Balance in POS</strong> — Full debtor details captured on every fiscal receipt</li>
-      <li>• <strong>Invoice Entry + Full Stock Audit</strong> — Manual invoices now deduct stock with typed movements</li>
+      <li>• <strong>Invoice Entry (Supplier Invoice)</strong> — Stock entry from supplier invoices (pack qty → pieces, GoodsReceipt + SUPPLIER_INVOICE movements, no VMS)</li>
       <li>• <strong>Per-Item Movement History</strong> — Complete traceability (History button in Inventory)</li>
       <li>• <strong>Polished Forms Everywhere</strong> — Consistent labeled sections, focus states, better validation</li>
     </ul>
@@ -94,20 +94,20 @@
 
       <div>
         <div class="font-semibold mb-1">Tax Rates &amp; Payment Methods</div>
-        <p>In <a href="{{ url_for('settings') }}" class="text-blue-600 underline">Settings</a> you fully control these — no hard-coded VAT. Create Standard 15%, Zero-Rated, Exempt, etc. Same for payments (CASH, CARD, MPAISA, ON_ACCOUNT, etc.). These flow into every calculation and every fiscal payload.</p>
+        <p>In <a href="{{ url_for('settings') }}" class="text-blue-600 underline">Settings</a> you fully control these — no hard-coded VAT. Default is G 12.5%; create Standard (G), Zero-Rated, Exempt, etc. Same for payments (CASH, CARD, MPAISA, ON_ACCOUNT, etc.). These flow into every calculation and every fiscal payload.</p>
       </div>
 
       <div>
-        <div class="font-semibold mb-1">Receipt Design (Visual Designer Available)</div>
-        <p><strong>Best option:</strong> Go to <strong>Receipt Designer</strong> (in the top navigation or from Settings). You can:</p>
+        <div class="font-semibold mb-1">Receipt Design — Composer 2.5 Model (Visual)</div>
+        <p><strong>Best option:</strong> Go to <strong>Receipt Designer</strong> (top nav or Settings → Open Visual Drag &amp; Drop Composer 2.5). You can:</p>
         <ul class="list-disc ml-5 text-xs mt-1">
-          <li>See every available field from the database (Order, Branch, Debtor, Fiscal Invoice, etc.)</li>
-          <li>Drag fields with your mouse into Header, Seller, Customer, Items, Totals, Fiscal, or Footer sections</li>
-          <li>Reorder fields inside each section</li>
-          <li>See a live preview while designing</li>
-          <li>Save the layout — it will be used for future receipts</li>
+          <li>See all DB fields (Order, Branch, Debtor, Fiscal, Totals shortcuts...)</li>
+          <li>Drag + reorder into Header / Seller / Customer / Items / Totals / Fiscal / Footer</li>
+          <li>Add Free Text / Notes anywhere</li>
+          <li>Toggle 80mm vs A4 live preview (styled close to final output)</li>
+          <li>Save — the layout (Composer 2.5) now fully drives PDF receipts for both WeasyPrint and FPDF fallback paths</li>
         </ul>
-        <p class="text-xs mt-1 mt-2">You can still use <strong>Custom Header HTML</strong> in Settings or fully edit <code>app/templates/receipt.html</code> for ultimate control.</p>
+        <p class="text-xs mt-1 mt-2">Legacy static layout in <code>receipt.html</code> is used when no composer layout is saved. Custom Header HTML in Settings still works on top.</p>
       </div>
 
       <div>
@@ -226,18 +226,21 @@
 
       <div>
         <div class="font-semibold">Debtors / On-Account Customers</div>
-        <p>Create and manage customers who buy on credit. When you select them in POS or Invoice Entry their current balance is shown live. The final fiscal receipt captures a full snapshot (name, TIN, phone, address, balance after this sale).</p>
+        <p>Create and manage customers who buy on credit. When you select them in POS or Invoice Entry their current balance is shown live. The final fiscal receipt captures a full snapshot (name, TIN, phone, address, balance after this sale). Use the Debtors page "Record Payment" button to reduce balances (optional audit receipt). Credit notes/returns now also reduce linked debtor AR.</p>
+
+        <div class="font-semibold mt-3">Rental Management (New)</div>
+        <p>Add Properties with barcodes (scannable like products). Add Tenants and assign to properties. Go to <strong>Rental → Rent Collection (Scan &amp; Pay)</strong> — the interface is deliberately almost identical to the main POS (same cart, scan input, Amount Received + change, payment methods). Scan a property barcode to pull tenant + due rent, add charges or payments, complete to record. Tenant outstanding balances update automatically. See Rental → Properties / Tenants / History for management. Use <strong>Maintenance / Work Orders</strong> (under Rental) to log and track repairs per property, with costs and status updates. Residential = VEP, Commercial = VIP for rent tax treatment.</p>
       </div>
 
       <div>
-        <div class="font-semibold">Advanced Invoice Entry</div>
-        <p>Found under the <strong>Purchasing</strong> dropdown. Designed for wholesale, manual, or back-office invoicing:</p>
+        <div class="font-semibold">Invoice Entry (Supplier Invoice)</div>
+        <p>Found under the <strong>Purchasing</strong> dropdown → "Invoice Entry (Supplier Invoice)". Use this to record a supplier's invoice and <strong>add stock</strong> (never deducts, never fiscalizes):</p>
         <ul class="list-disc ml-5 space-y-1">
-          <li>Dynamic searchable line items</li>
-          <li>Choose debtor (live balance shown)</li>
-          <li>Option to fiscalize the invoice with FRCS VMS</li>
-          <li>Stock is deducted immediately using typed <strong>INVOICE_ENTRY</strong> movements</li>
-          <li>Perfect for credit sales that also update debtor balances</li>
+          <li>Select Supplier + enter their Invoice Number + Payment type (for your records)</li>
+          <li>Add lines by product; enter Packs qty (e.g. 2 cartons). Pieces auto-calculated using the product's Pack Size (set in Inventory, e.g. 1 carton = 24 pcs)</li>
+          <li>Enter the supplier's unit cost VEP / VIP per piece (or let VIP auto-calc from VEP at 12.5% for UI); line tax and totals shown live</li>
+          <li>Creates a Goods Receipt (with supplier_invoice_no) + SUPPLIER_INVOICE StockMovement(s) + updates on-hand. Full audit, no VMS.</li>
+          <li>Pack support in Inventory: every product can have pack_size, pack_unit, pack_cost, and a default Supplier assignment.</li>
         </ul>
       </div>
 
@@ -260,7 +263,7 @@
       <li><strong>Stock Take</strong> — full count process with variance adjustments.</li>
       <li><strong>History button</strong> on every product in Inventory — the single source of truth for that item's life.</li>
     </ul>
-    <div class="mt-3 text-xs bg-blue-50 p-3 rounded-2xl">Movement types recorded: SALE, INVOICE_ENTRY, PURCHASE_RECEIPT, ADJUSTMENT, STOCKTAKE, TRANSFER_IN/OUT, RECEIPT_REVERSAL, RETURN, etc.</div>
+    <div class="mt-3 text-xs bg-blue-50 p-3 rounded-2xl">Movement types recorded: SALE, SUPPLIER_INVOICE, GR (goods receipt), ADJUSTMENT, STOCKTAKE, TRANSFER_IN/OUT, RETURN, REVERSAL, etc. (full immutable audit).</div>
   </div>
 
   <!-- 7. Reports -->
@@ -309,6 +312,7 @@
 
   <div class="mt-8 text-center text-xs text-slate-400 border-t pt-4">
     This guide is always available from the top navigation (Help) or Dashboard.<br>
+    <strong>Recommended for beginners:</strong> Download the <a href="/static/help/Cloud_IT_POS_How_to_Begin_Guide.pdf" target="_blank" class="text-blue-600 underline">Cloud IT POS - How to Begin (Getting Started) PDF</a>.
     Print or save this page as your shop reference. Revisit after any system update.
   </div>
 </div>

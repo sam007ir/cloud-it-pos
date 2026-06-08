@@ -124,12 +124,12 @@
 <script>
 function getActiveVatRate() {
   // Deprecated - now we use per-product tax rate from the row
-  return 0.15;
+  return 0.125;
 }
 
 function getRowTaxRate(row) {
   const rate = parseFloat(row.dataset.taxRate);
-  return isNaN(rate) ? 15 : rate;
+  return isNaN(rate) ? 12.5 : rate;
 }
 
 function syncVipFromVep(vepInput) {

@@ -1,258 +1,358 @@
 {% extends "base.html" %}
 
-{% block title %}Manual Invoice Entry{% endblock %}
+{% block title %}Invoice Entry (Supplier Invoice){% endblock %}
 
 {% block content %}
 <div class="max-w-5xl">
-  <h1 class="text-3xl font-semibold tracking-tight mb-6">Manual Invoice Entry</h1>
+  <h1 class="text-3xl font-semibold tracking-tight mb-2">Invoice Entry (Supplier Invoice)</h1>
+  <p class="text-sm text-slate-600 mb-6">Record a supplier invoice to add stock to inventory based on the supplier's invoice. <strong>Stock is added (not deducted). No VMS fiscalization.</strong> Supports pack sizes (e.g. enter 1 carton and 24 pieces are added if pack size is set in inventory).</p>
+
+  <!-- Held Supplier Invoices -->
+  <div class="mb-4">
+    <div class="flex justify-between items-center mb-2">
+      <div class="text-sm font-semibold">Held Supplier Invoices</div>
+      <button onclick="loadHeldSupplierInvoices()" class="text-xs px-2 py-0.5 border rounded">Refresh</button>
+    </div>
+    <div id="held-supplier-invoices" class="bg-white border rounded-2xl p-2 text-sm max-h-32 overflow-auto">
+      <!-- populated by JS -->
+    </div>
+  </div>
 
   <div class="bg-white rounded-3xl border p-6">
-    <form id="invoice-form" onsubmit="submitInvoice(event)">
+    <form id="supplier-invoice-form" onsubmit="submitSupplierInvoice(event)">
       <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
         <div>
-          <label class="text-xs font-semibold text-slate-500">Branch *</label>
-          <select id="inv-branch" required class="w-full border rounded-2xl px-4 py-2 text-sm">
-            {% for b in branches %}
-            <option value="{{ b.id }}">{{ b.name }}</option>
+          <label class="text-xs font-semibold text-slate-500">Supplier *</label>
+          <select id="sup-inv-supplier" required class="w-full border rounded-2xl px-4 py-2 text-sm">
+            <option value="">-- Select Supplier --</option>
+            {% for s in suppliers %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
             {% endfor %}
           </select>
         </div>
         <div>
-          <label class="text-xs font-semibold text-slate-500">Customer / Debtor</label>
-          <select id="inv-debtor" class="w-full border rounded-2xl px-4 py-2 text-sm" onchange="selectInvoiceDebtor(this)">
-            <option value="">Cash / Walk-in</option>
-            {% for d in debtors %}
-            <option value="{{ d.id }}" data-name="{{ d.name }}" data-tin="{{ d.tin or '' }}" data-balance="{{ d.outstanding_balance }}">
-              {{ d.name }} (Bal: FJD {{ "%.2f"|format(d.outstanding_balance) }})
-            </option>
-            {% endfor %}
-          </select>
-          <!-- Live debtor balance + details panel (advanced) -->
-          <div id="inv-debtor-info" class="hidden mt-1.5 text-xs bg-blue-50 border border-blue-200 rounded-2xl px-3 py-1.5">
-            <div><strong>Debtor:</strong> <span id="inv-debtor-name"></span></div>
-            <div><strong>Balance:</strong> <span id="inv-debtor-balance" class="font-semibold"></span></div>
-            <div id="inv-debtor-extra" class="text-[10px] text-slate-600 mt-0.5"></div>
-          </div>
+          <label class="text-xs font-semibold text-slate-500">Supplier Invoice Number *</label>
+          <input id="sup-inv-no" required class="w-full border rounded-2xl px-4 py-2 text-sm font-mono">
         </div>
         <div>
-          <label class="text-xs font-semibold text-slate-500">Payment Method</label>
-          <select id="inv-payment" class="w-full border rounded-2xl px-4 py-2 text-sm">
-            {% for pm in payment_methods %}
-            <option value="{{ pm.code }}">{{ pm.name }}</option>
-            {% endfor %}
-            <option value="ON_ACCOUNT">On Account (Debtor)</option>
+          <label class="text-xs font-semibold text-slate-500">Payment Type</label>
+          <select id="sup-inv-payment" class="w-full border rounded-2xl px-4 py-2 text-sm">
+            <option value="CASH">Cash</option>
+            <option value="CARD">Card</option>
+            <option value="ON_ACCOUNT">On Account (Supplier Credit)</option>
           </select>
         </div>
       </div>
 
-      <!-- Customer override fields (advanced) -->
-      <div class="grid grid-cols-2 gap-3 mb-4">
-        <input id="inv-customer-name" placeholder="Override customer name (optional)" class="border rounded-2xl px-3 py-1.5 text-sm">
-        <input id="inv-customer-tin" placeholder="Override TIN (B2B)" class="border rounded-2xl px-3 py-1.5 text-sm font-mono">
-      </div>
-
-      <!-- Tax & Compliance info (advanced) -->
-      <div class="mb-4 p-3 bg-emerald-50 border border-emerald-200 rounded-2xl text-xs">
-        <div class="font-semibold text-emerald-700 mb-1">Tax &amp; Fiscal Settings (from Settings)</div>
-        {% if active_tax_rates %}
-          <div>Active rates: {% for r in active_tax_rates %}<span class="font-mono">{{ r.label }}@{{ r.rate }}% </span>{% endfor %}</div>
-        {% else %}
-          <div>Using default 15% (configure Tax Rates in Settings for FRCS V2/V3 compliance)</div>
-        {% endif %}
-        <label class="inline-flex items-center mt-1 cursor-pointer">
-          <input type="checkbox" id="inv-fiscalize" checked class="mr-1.5">
-          <span class="text-emerald-700">Fiscalize with FRCS VMS (recommended for all manual invoices)</span>
-        </label>
-      </div>
-
-      <div class="mb-1 text-xs text-amber-600 flex items-center gap-1">
-        <i class="fa-solid fa-exclamation-triangle"></i>
-        <span>Stock will be deducted immediately on posting. All movements are audited.</span>
+      <div class="mb-2 text-xs text-amber-600">
+        <i class="fa-solid fa-info-circle"></i> 
+        Stock will be <strong>ADDED</strong>. Use "Packs" qty if the item has a pack size defined in Inventory (e.g. 1 carton = 24 pieces).
       </div>
 
       <div class="mb-4">
-        <label class="text-sm font-semibold">Add Items</label>
-        <div class="flex gap-2 mt-1">
-          <select id="inv-product" class="flex-1 border rounded-2xl px-4 py-2 text-sm">
-            {% for p in products %}
-            <option value="{{ p.id }}" data-price="{{ p.price }}" data-name="{{ p.name }}">
-              {{ p.name }} ({{ p.sku }})
-            </option>
-            {% endfor %}
-          </select>
-          <input type="number" id="inv-qty" value="1" class="w-20 border rounded-2xl px-3 py-2 text-sm">
-          <button type="button" onclick="addInvoiceItem()" class="px-5 bg-[#0A4D68] text-white rounded-2xl text-sm">Add</button>
+        <label class="text-sm font-semibold">Add Items (search by name, SKU or barcode)</label>
+        <div class="flex gap-2 mt-1 relative">
+          <div class="flex-1">
+            <input id="sup-inv-product-search" type="text" 
+                   class="w-full border rounded-2xl px-4 py-2 text-sm focus:outline-none focus:border-[#0A4D68]" 
+                   placeholder="Type to search products..." 
+                   autocomplete="off"
+                   oninput="searchSupplierInvoiceProducts()">
+            <div id="sup-inv-product-results" 
+                 class="hidden absolute left-0 right-0 mt-1 max-h-72 overflow-auto bg-white border rounded-2xl shadow-lg z-50 text-sm"></div>
+          </div>
+          <input type="number" id="sup-inv-pack-qty" value="1" min="1" class="w-24 border rounded-2xl px-3 py-2 text-sm" placeholder="Packs">
+          <button type="button" onclick="addSupplierInvoiceItem()" class="px-5 bg-[#0A4D68] text-white rounded-2xl text-sm">Add Line</button>
         </div>
+        <div id="sup-pack-info" class="text-[10px] text-slate-500 mt-1 h-4"></div>
+        <div id="sup-selected-product" class="text-[10px] text-emerald-600 mt-0.5 hidden"></div>
       </div>
 
       <table class="w-full text-sm mb-6">
         <thead class="bg-slate-50">
           <tr>
-            <th class="text-left px-4 py-2">Item</th>
-            <th class="px-4 py-2 text-right w-20">Qty</th>
-            <th class="px-4 py-2 text-right w-24">Unit Price</th>
-            <th class="px-4 py-2 text-right">Total</th>
-            <th class="px-2 py-2"></th>
+            <th class="text-left px-3 py-1">Item</th>
+            <th class="px-2 py-1 text-center w-16">Packs</th>
+            <th class="px-2 py-1 text-center w-14">Pack Size</th>
+            <th class="px-2 py-1 text-right w-16">Pieces</th>
+            <th class="px-2 py-1 text-right w-20">VEP / pc</th>
+            <th class="px-2 py-1 text-right w-16">Tax</th>
+            <th class="px-2 py-1 text-right w-20">VIP / pc</th>
+            <th class="px-2 py-1 text-right w-24">Line Total (VIP)</th>
+            <th class="px-2 py-1 w-8"></th>
           </tr>
         </thead>
-        <tbody id="inv-items"></tbody>
-        <tfoot>
-          <tr class="font-semibold border-t">
-            <td colspan="3" class="px-4 py-3 text-right">Subtotal</td>
-            <td class="px-4 py-3 text-right" id="inv-subtotal">FJD 0.00</td>
-            <td></td>
-          </tr>
-          <tr class="font-semibold">
-            <td colspan="3" class="px-4 py-3 text-right">VAT / Tax</td>
-            <td class="px-4 py-3 text-right" id="inv-vat">FJD 0.00</td>
-            <td></td>
-          </tr>
-          <tr class="font-bold text-lg border-t">
-            <td colspan="3" class="px-4 py-3 text-right">TOTAL</td>
-            <td class="px-4 py-3 text-right" id="inv-total">FJD 0.00</td>
-            <td></td>
-          </tr>
-        </tfoot>
+        <tbody id="sup-inv-items"></tbody>
       </table>
 
-      <button type="submit" class="w-full py-3 bg-emerald-600 text-white font-semibold rounded-2xl">
-        Save Invoice &amp; Update Stock
-      </button>
+      <div class="flex justify-end mb-4 text-sm">
+        <div class="text-right">
+          <div>Total Pieces: <span id="sup-total-pieces" class="font-semibold">0</span></div>
+          <div>Total VEP: <span id="sup-total-vep" class="font-semibold">FJD 0.00</span></div>
+          <div>Total Cost (VIP): <span id="sup-total-cost" class="font-semibold">FJD 0.00</span></div>
+        </div>
+      </div>
+
+      <div class="flex gap-2">
+        <button type="button" onclick="holdCurrentSupplierInvoice()" class="flex-1 py-3 border border-amber-500 text-amber-700 font-semibold rounded-2xl">
+          Hold Supplier Invoice
+        </button>
+        <button type="submit" class="flex-1 py-3 bg-emerald-600 text-white font-semibold rounded-2xl">
+          Save Supplier Invoice &amp; Add Stock (No VMS)
+        </button>
+      </div>
     </form>
+  </div>
+
+  <div class="mt-4 text-xs text-slate-500">
+    This creates a Goods Receipt record (for audit) and adds the calculated pieces to stock. Use the Goods Receipts page or product movement history to view details.
   </div>
 </div>
 
 <script>
-let invItems = [];
+// ==================== INVOICE ENTRY (Supplier Invoice) - Stock Entry ONLY, no VMS fiscal ====================
+let supInvItems = [];
+let selectedInvProduct = null;  // populated by the search box
 
-function addInvoiceItem() {
-  const select = document.getElementById('inv-product');
-  const qty = parseFloat(document.getElementById('inv-qty').value) || 1;
-  const opt = select.options[select.selectedIndex];
+function searchSupplierInvoiceProducts() {
+  const input = document.getElementById('sup-inv-product-search');
+  const resultsBox = document.getElementById('sup-inv-product-results');
+  const info = document.getElementById('sup-pack-info');
+  if (!input || !resultsBox) return;
 
-  const productId = parseInt(opt.value);
-  const name = opt.dataset.name;
-  const price = parseFloat(opt.dataset.price);
-
-  // Check if already exists
-  const existing = invItems.findIndex(i => i.product_id === productId);
-  if (existing >= 0) {
-    invItems[existing].qty += qty;
-  } else {
-    invItems.push({ product_id: productId, name, price, qty });
+  const q = input.value.trim();
+  if (q.length < 1) {
+    resultsBox.classList.add('hidden');
+    resultsBox.innerHTML = '';
+    return;
   }
 
-  renderInvoiceItems();
+  // Debounce via timeout on caller is simple; here we fetch immediately for responsiveness (small limit)
+  fetch(`/api/products/search?q=${encodeURIComponent(q)}&limit=15`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.results || !data.results.length) {
+        resultsBox.innerHTML = `<div class="p-3 text-xs text-slate-500">No matches for "${q}"</div>`;
+        resultsBox.classList.remove('hidden');
+        return;
+      }
+      let html = '';
+      data.results.forEach(p => {
+        const packInfo = `Pack: ${p.pack_size || 1} ${p.pack_unit || 'pcs'}`;
+        const taxInfo = `Tax: ${p.tax_rate || 12.5}%`;
+        const stockInfo = `${p.on_hand || 0} on hand`;
+        html += `
+          <div class="px-3 py-1.5 hover:bg-emerald-50 cursor-pointer border-b last:border-b-0" 
+               data-id="${p.id}">
+            <div class="font-medium">${p.name} <span class="text-xs text-slate-500 font-mono">(${p.sku})</span></div>
+            <div class="text-[10px] text-slate-500">${p.barcode ? p.barcode + ' • ' : ''}${packInfo} • ${taxInfo} • ${stockInfo}${p.supplier_name ? ' • ' + p.supplier_name : ''}</div>
+          </div>`;
+      });
+      resultsBox.innerHTML = html;
+      resultsBox.classList.remove('hidden');
+
+      // Attach click handlers
+      resultsBox.querySelectorAll('div[data-id]').forEach(el => {
+        el.onclick = () => {
+          const pid = parseInt(el.dataset.id);
+          // Find full product from results (or re-fetch, but we have it in closure via data attr expansion)
+          const prod = data.results.find(x => x.id === pid);
+          if (prod) selectSearchProductForInvoice(prod);
+          resultsBox.classList.add('hidden');
+          input.value = '';
+        };
+      });
+    })
+    .catch(() => {
+      resultsBox.innerHTML = `<div class="p-3 text-xs text-red-500">Search error</div>`;
+      resultsBox.classList.remove('hidden');
+    });
 }
 
-function renderInvoiceItems() {
-  const tbody = document.getElementById('inv-items');
-  tbody.innerHTML = '';
-  let subtotal = 0;
+function selectSearchProductForInvoice(prod) {
+  selectedInvProduct = prod;
+  const info = document.getElementById('sup-pack-info');
+  const selInfo = document.getElementById('sup-selected-product');
+  const taxRate = prod.tax_rate || 12.5;
+  const onHand = prod.on_hand || 0;
+  if (info) {
+    info.textContent = `Pack: ${prod.pack_size || 1} ${prod.pack_unit || 'pcs'} — Tax: ${taxRate}% — ${onHand} on hand — ref cost ${ (prod.pack_cost||0).toFixed(2) } (enter unit VEP/VIP below)`;
+  }
+  if (selInfo) {
+    selInfo.textContent = `Selected: ${prod.name} (${prod.sku}) — Tax ${taxRate}% — ${onHand} on hand`;
+    selInfo.classList.remove('hidden');
+  }
+  // Focus pack qty for convenience
+  const qty = document.getElementById('sup-inv-pack-qty');
+  if (qty) qty.focus();
+  if (qty) qty.select();
+}
 
-  invItems.forEach((item, idx) => {
-    const lineTotal = item.price * item.qty;
-    subtotal += lineTotal;
+function addSupplierInvoiceItem() {
+  const packQtyEl = document.getElementById('sup-inv-pack-qty');
+  const packQty = parseInt(packQtyEl && packQtyEl.value) || 1;
+
+  if (!selectedInvProduct) {
+    alert('Please search and select a product first');
+    return;
+  }
+
+  const p = selectedInvProduct;
+  const productId = p.id;
+  const name = p.name + (p.sku ? ' (' + p.sku + ')' : '');
+  const packSize = p.pack_size || 1;
+  const packUnit = p.pack_unit || 'pcs';
+  const taxRate = p.tax_rate || 12.5;
+
+  const existing = supInvItems.findIndex(i => i.product_id === productId);
+  if (existing >= 0) {
+    supInvItems[existing].pack_qty += packQty;
+    if (!supInvItems[existing].tax_rate) supInvItems[existing].tax_rate = taxRate;
+  } else {
+    supInvItems.push({
+      product_id: productId,
+      name: name,
+      pack_qty: packQty,
+      pack_size: packSize,
+      pack_unit: packUnit,
+      cost_vep: 0,
+      cost_vip: 0,
+      tax_rate: taxRate
+    });
+  }
+  renderSupInvItems();
+
+  // Clear selection for next item
+  selectedInvProduct = null;
+  const selInfo = document.getElementById('sup-selected-product');
+  if (selInfo) selInfo.classList.add('hidden');
+  const info = document.getElementById('sup-pack-info');
+  if (info) info.textContent = '';
+  if (packQtyEl) packQtyEl.value = '1';
+}
+
+function renderSupInvItems() {
+  const tbody = document.getElementById('sup-inv-items');
+  if (!tbody) return;
+  tbody.innerHTML = '';
+
+  let totalPieces = 0;
+  let totalCostVep = 0;
+  let totalCostVip = 0;
+
+  supInvItems.forEach((item, idx) => {
+    const pieces = (item.pack_qty || 1) * (item.pack_size || 1);
+    totalPieces += pieces;
+    const lineVep = (parseFloat(item.cost_vep) || 0) * pieces;
+    const lineVip = (parseFloat(item.cost_vip) || 0) * pieces;
+    totalCostVep += lineVep;
+    totalCostVip += lineVip;
+    const lineTotal = lineVip;
 
     const tr = document.createElement('tr');
     tr.className = 'border-b';
     tr.innerHTML = `
-      <td class="px-4 py-2">${item.name}</td>
-      <td class="px-4 py-2">
-        <input type="number" value="${item.qty}" class="w-16 border rounded px-2 py-0.5 text-sm text-right"
-               onchange="updateInvQty(${idx}, this.value)">
+      <td class="px-3 py-1">${item.name}</td>
+      <td class="px-2 py-1">
+        <input type="number" value="${item.pack_qty}" class="w-14 border rounded px-1 py-0.5 text-sm text-center"
+               onchange="updateSupPackQty(${idx}, this.value)">
       </td>
-      <td class="px-4 py-2 text-right">
-        <input type="number" step="0.01" value="${item.price}" class="w-20 border rounded px-2 py-0.5 text-sm text-right"
-               onchange="updateInvPrice(${idx}, this.value)">
+      <td class="px-2 py-1 text-center text-xs">${item.pack_size} ${item.pack_unit}</td>
+      <td class="px-2 py-1 text-right font-semibold">${pieces}</td>
+      <td class="px-2 py-1">
+        <input type="number" step="0.01" value="${item.cost_vep || 0}" class="w-16 border rounded px-1 py-0.5 text-sm text-right"
+               onchange="updateSupCostVep(${idx}, this.value)" placeholder="VEP">
       </td>
-      <td class="px-4 py-2 text-right font-semibold">FJD ${lineTotal.toFixed(2)}</td>
-      <td class="px-2 py-2 text-right">
-        <button onclick="removeInvItem(${idx})" class="text-red-500 text-xs">×</button>
+      <td class="px-2 py-1 text-right text-xs text-red-600" id="sup-tax-${idx}">0.00</td>
+      <td class="px-2 py-1">
+        <input type="number" step="0.01" value="${item.cost_vip || 0}" class="w-16 border rounded px-1 py-0.5 text-sm text-right"
+               onchange="updateSupCostVip(${idx}, this.value)" placeholder="VIP">
+      </td>
+      <td class="px-2 py-1 text-right font-semibold tabular-nums">FJD ${lineTotal.toFixed(2)}</td>
+      <td class="px-2 py-1 text-right">
+        <button onclick="removeSupInvItem(${idx})" class="text-red-500 text-xs">×</button>
       </td>
     `;
     tbody.appendChild(tr);
+    updateSupLineTax(idx);
   });
 
-  // Approximate for live UI. Backend uses exact per-product tax rate.
-  const vat = subtotal * 0.15;
-  const total = subtotal + vat;
+  const tp = document.getElementById('sup-total-pieces');
+  if (tp) tp.textContent = totalPieces;
 
-  document.getElementById('inv-subtotal').textContent = `FJD ${subtotal.toFixed(2)}`;
-  document.getElementById('inv-vat').textContent = `FJD ${vat.toFixed(2)}`;
-  document.getElementById('inv-total').textContent = `FJD ${total.toFixed(2)}`;
+  const vepBox = document.getElementById('sup-total-vep');
+  if (vepBox) vepBox.textContent = `FJD ${totalCostVep.toFixed(2)}`;
+
+  const costBox = document.getElementById('sup-total-cost');
+  if (costBox) {
+    costBox.textContent = `FJD ${totalCostVip.toFixed(2)}`;
+  }
 }
 
-function updateInvQty(idx, newQty) {
-  invItems[idx].qty = parseFloat(newQty) || 1;
-  renderInvoiceItems();
+function updateSupPackQty(idx, val) {
+  supInvItems[idx].pack_qty = parseInt(val) || 1;
+  renderSupInvItems();
 }
 
-function updateInvPrice(idx, newPrice) {
-  invItems[idx].price = parseFloat(newPrice) || 0;
-  renderInvoiceItems();
+function updateSupCostVep(idx, val) {
+  supInvItems[idx].cost_vep = parseFloat(val) || 0;
+  const rate = (supInvItems[idx].tax_rate || 12.5) / 100;
+  // Always sync VIP from VEP using the product's assigned tax rate (e.g. 12.5%)
+  supInvItems[idx].cost_vip = parseFloat( (supInvItems[idx].cost_vep * (1 + rate)).toFixed(2) );
+  renderSupInvItems();
 }
 
-function removeInvItem(idx) {
-  invItems.splice(idx, 1);
-  renderInvoiceItems();
+function updateSupCostVip(idx, val) {
+  supInvItems[idx].cost_vip = parseFloat(val) || 0;
+  const rate = (supInvItems[idx].tax_rate || 12.5) / 100;
+  // Sync VEP from VIP using the product's tax rate for consistency
+  supInvItems[idx].cost_vep = parseFloat( (supInvItems[idx].cost_vip / (1 + rate)).toFixed(2) );
+  updateSupLineTax(idx);
+  renderSupInvItems();
 }
 
-function selectInvoiceDebtor(select) {
-  const infoBox = document.getElementById('inv-debtor-info');
-  if (!select.value) {
-    infoBox.classList.add('hidden');
+function updateSupLineTax(idx) {
+  const item = supInvItems[idx];
+  const pieces = (item.pack_qty || 1) * (item.pack_size || 1);
+  const lineVip = (parseFloat(item.cost_vip) || 0) * pieces;
+  const lineVep = (parseFloat(item.cost_vep) || 0) * pieces;
+  const tax = lineVip - lineVep;
+  const el = document.getElementById(`sup-tax-${idx}`);
+  if (el) el.textContent = tax.toFixed(2);
+}
+
+function removeSupInvItem(idx) {
+  supInvItems.splice(idx, 1);
+  renderSupInvItems();
+}
+
+async function submitSupplierInvoice(e) {
+  if (e && e.preventDefault) e.preventDefault();
+
+  const supplierId = document.getElementById('sup-inv-supplier').value;
+  const invNo = (document.getElementById('sup-inv-no').value || '').trim();
+  const paymentType = document.getElementById('sup-inv-payment').value;
+
+  if (!supplierId || !invNo) {
+    alert('Supplier and Supplier Invoice Number are required');
+    return;
+  }
+  if (supInvItems.length === 0) {
+    alert('Add at least one item');
     return;
   }
 
-  const opt = select.options[select.selectedIndex];
-  const fbBal = parseFloat(opt.dataset.balance) || 0;
-  const name = opt.dataset.name || '';
-
-  document.getElementById('inv-debtor-name').textContent = name;
-  document.getElementById('inv-debtor-balance').textContent = `FJD ${fbBal.toFixed(2)} (loading...)`;
-  document.getElementById('inv-debtor-extra').textContent = '';
-  infoBox.classList.remove('hidden');
-
-  fetch(`/api/debtor/${select.value}/balance`)
-    .then(r => r.json())
-    .then(d => {
-      if (d.success) {
-        document.getElementById('inv-debtor-name').textContent = d.name;
-        document.getElementById('inv-debtor-balance').innerHTML = `FJD ${d.outstanding_balance.toFixed(2)} <span class="text-[10px]">(live)</span>`;
-        let extra = [];
-        if (d.tin) extra.push('TIN: ' + d.tin);
-        if (d.phone) extra.push('Ph: ' + d.phone);
-        if (d.address) extra.push(d.address.substring(0, 40));
-        document.getElementById('inv-debtor-extra').textContent = extra.join(' • ');
-      }
-    })
-    .catch(() => {
-      document.getElementById('inv-debtor-balance').textContent = `FJD ${fbBal.toFixed(2)}`;
-    });
-}
-
-async function submitInvoice(e) {
-  e.preventDefault();
-
-  if (invItems.length === 0) {
-    alert("Please add at least one item.");
-    return;
-  }
-
-  const debtorSelect = document.getElementById('inv-debtor');
   const payload = {
-    branch_id: parseInt(document.getElementById('inv-branch').value),
-    items: invItems.map(i => ({
+    is_supplier_invoice: true,
+    supplier_id: parseInt(supplierId),
+    supplier_invoice_no: invNo,
+    payment_type: paymentType,
+    items: supInvItems.map(i => ({
       product_id: i.product_id,
-      quantity: i.qty,
-      price: i.price
-    })),
-    debtor_id: debtorSelect && debtorSelect.value ? parseInt(debtorSelect.value) : null,
-    payment_method: document.getElementById('inv-payment').value,
-    customer_name: document.getElementById('inv-customer-name').value || '',
-    customer_tin: document.getElementById('inv-customer-tin').value || '',
-    fiscalize: document.getElementById('inv-fiscalize').checked
+      pack_qty: i.pack_qty,
+      cost_vep: parseFloat(i.cost_vep) || 0,
+      cost_vip: parseFloat(i.cost_vip) || 0
+    }))
   };
 
   const res = await fetch('/api/invoice-entry', {
@@ -263,11 +363,161 @@ async function submitInvoice(e) {
   const data = await res.json();
 
   if (data.success) {
-    showToast('Invoice saved • Stock & movements updated' + (data.fiscalized ? ' • Fiscalized' : ''));
-    window.location.href = '/sales/' + data.order_id;
+    showToast(data.message || 'Supplier invoice saved & stock added');
+    // reset form
+    supInvItems = [];
+    const tbody = document.getElementById('sup-inv-items');
+    if (tbody) tbody.innerHTML = '';
+    const supSel = document.getElementById('sup-inv-supplier');
+    if (supSel) supSel.value = '';
+    const invNoEl = document.getElementById('sup-inv-no');
+    if (invNoEl) invNoEl.value = '';
+    const info = document.getElementById('sup-pack-info');
+    if (info) info.textContent = '';
+    // refresh to show updated stock (user can also go to Goods Receipts)
+    setTimeout(() => location.reload(), 900);
   } else {
-    showToast(data.message || 'Failed to save invoice', 'error');
+    showToast(data.message || 'Failed to save supplier invoice', 'error');
   }
+}
+
+// initial render hook if needed
+document.addEventListener('DOMContentLoaded', function() {
+  // nothing extra; select will populate on add
+  loadHeldSupplierInvoices();
+});
+
+async function holdCurrentSupplierInvoice() {
+  const supplierId = document.getElementById('sup-inv-supplier').value;
+  const invNo = (document.getElementById('sup-inv-no').value || '').trim();
+  const paymentType = document.getElementById('sup-inv-payment').value;
+
+  if (supInvItems.length === 0) {
+    return alert('Add at least one item before holding.');
+  }
+
+  const supplierSel = document.getElementById('sup-inv-supplier');
+  const ref = supplierSel ? supplierSel.options[supplierSel.selectedIndex].text : (invNo || 'Supplier Invoice Draft');
+  const notes = prompt("Notes for this held supplier invoice (optional):", "") || "";
+
+  const payload = {
+    type: 'supplier_invoice',
+    reference: ref,
+    notes: notes,
+    data: {
+      supplier_id: parseInt(supplierId),
+      supplier_invoice_no: invNo,
+      payment_type: paymentType,
+      items: supInvItems.map(i => ({
+        product_id: i.product_id,
+        name: i.name,
+        pack_qty: i.pack_qty,
+        cost_vep: i.cost_vep,
+        cost_vip: i.cost_vip
+      }))
+    }
+  };
+
+  const res = await fetch('/api/held-transactions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Supplier invoice held');
+    // reset the form
+    supInvItems = [];
+    document.getElementById('sup-inv-items').innerHTML = '';
+    document.getElementById('sup-inv-supplier').value = '';
+    document.getElementById('sup-inv-no').value = '';
+    document.getElementById('sup-pack-info').textContent = '';
+    loadHeldSupplierInvoices();
+  } else {
+    showToast(data.message || 'Failed to hold', 'error');
+  }
+}
+
+async function loadHeldSupplierInvoices() {
+  const container = document.getElementById('held-supplier-invoices');
+  if (!container) return;
+  container.innerHTML = '<div class="text-xs text-slate-400 p-1">Loading...</div>';
+
+  try {
+    const res = await fetch('/api/held-transactions?type=supplier_invoice');
+    const data = await res.json();
+
+    if (!data.held || data.held.length === 0) {
+      container.innerHTML = '<div class="text-xs text-slate-400 p-1">No held supplier invoices</div>';
+      return;
+    }
+
+    let html = '';
+    data.held.forEach(h => {
+      const d = h.data || {};
+      const count = (d.items || []).length;
+      const notesHtml = h.notes ? `<div class="text-[9px] text-amber-600">Note: ${h.notes}</div>` : '';
+      html += `
+        <div class="flex items-center justify-between text-xs border-b py-1 last:border-0">
+          <div>${h.reference || 'Draft'} <span class="text-slate-400">(${count} lines)</span>${notesHtml}</div>
+          <div>
+            <button onclick="recallHeldSupplierInvoice(${h.id})" class="px-2 py-0.5 text-emerald-700 border border-emerald-300 rounded">Continue</button>
+            <button onclick="deleteHeldSupplier(${h.id}, this)" class="px-1 text-red-500">×</button>
+          </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div class="text-xs text-red-500 p-1">Error loading held</div>';
+  }
+}
+
+async function recallHeldSupplierInvoice(heldId) {
+  const res = await fetch(`/api/held-transactions/${heldId}/recall`, { method: 'POST' });
+  const data = await res.json();
+
+  if (data.success && data.type === 'supplier_invoice' && data.data) {
+    const d = data.data;
+    // reset current
+    supInvItems = [];
+    document.getElementById('sup-inv-items').innerHTML = '';
+
+    // restore header
+    if (d.supplier_id) document.getElementById('sup-inv-supplier').value = d.supplier_id;
+    if (d.supplier_invoice_no) document.getElementById('sup-inv-no').value = d.supplier_invoice_no;
+    if (d.payment_type) document.getElementById('sup-inv-payment').value = d.payment_type;
+
+    // restore lines
+    if (d.items && d.items.length) {
+      // We need product details for display — re-use the selected mechanism or simple push
+      // For simplicity, push minimal and let user re-select if needed for pack info, but try to show name if possible.
+      // Since we don't have full product names here, we push with product_id only and will show ID (user can re-search if wanted).
+      d.items.forEach(it => {
+        supInvItems.push({
+          product_id: it.product_id,
+          name: it.name || ('Product #' + it.product_id),
+          pack_qty: it.pack_qty || 1,
+          pack_size: 1,
+          pack_unit: 'pcs',
+          cost_vep: it.cost_vep || 0,
+          cost_vip: it.cost_vip || 0
+        });
+      });
+    }
+
+    renderSupInvItems();
+    showToast('Held supplier invoice recalled');
+    loadHeldSupplierInvoices();
+  } else {
+    showToast('Failed to recall', 'error');
+  }
+}
+
+async function deleteHeldSupplier(heldId, el) {
+  if (!confirm('Delete held supplier invoice?')) return;
+  await fetch(`/api/held-transactions/${heldId}`, { method: 'DELETE' });
+  if (el && el.parentElement) el.parentElement.parentElement.remove();
 }
 </script>
 {% endblock %}

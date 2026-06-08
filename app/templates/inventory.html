@@ -4,12 +4,20 @@
 
 {% block content %}
 <div class="flex justify-between items-center mb-6">
-  <div>
+  <div class="flex-1">
     <h1 class="text-3xl font-semibold tracking-tight">Inventory Management</h1>
     <p class="text-slate-500">Multi-branch stock control • Real-time updates</p>
+    <div class="mt-2">
+      <input type="text" id="inventory-search" onkeyup="filterInventoryTable()" 
+             class="w-full max-w-sm border rounded-2xl px-4 py-2 text-sm focus:outline-none focus:border-[#0A4D68]" 
+             placeholder="Search / filter products (name, SKU, barcode...)">
+    </div>
   </div>
   {% if user.role == 'admin' %}
-  <div class="flex gap-2">
+  <div class="flex items-center gap-2">
+    <button onclick="downloadProductTemplate()" class="px-4 py-2.5 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+      <i class="fa-solid fa-download"></i> Download Template
+    </button>
     <button onclick="showImportExcelModal()" class="px-4 py-2.5 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
       <i class="fa-solid fa-file-excel"></i> Import Excel
     </button>
@@ -33,7 +41,7 @@
 {% endif %}
 
 <div class="bg-white rounded-3xl border overflow-x-auto">
-  <table class="w-full text-sm">
+  <table id="inventory-table" class="w-full text-sm">
     <thead>
       <tr class="bg-slate-50">
         <th class="text-left px-6 py-4 font-medium">Product</th>
@@ -78,12 +86,9 @@
           </div>
           <div class="text-[9px] text-emerald-600">{{ data.on_hand }} on hand</div>
           {% if data.on_order > 0 %}
-          <div class="text-[9px] text-blue-600">+{{ data.on_order }} on order</div>
+            <div class="text-[9px] text-blue-600">+{{ data.on_order }} on order</div>
           {% endif %}
-          <div class="mt-1 flex flex-col gap-0.5">
-            <input type="number" value="{{ data.on_hand }}" step="1"
-                   class="w-14 border rounded text-center py-0.5 text-xs"
-                   onchange="adjustStock({{ row.product.id }}, {{ b.id }}, this.value)">
+          <div class="mt-1">
             <button onclick="setBranchPrice({{ row.product.id }}, {{ b.id }}, {{ data.price }}, {{ data.cost_price or 0 }})" 
                     class="text-[9px] text-purple-600 hover:underline">Set price</button>
           </div>
@@ -91,8 +96,25 @@
         {% endfor %}
 
         <td class="px-4 py-3 text-right">
-          <button onclick="editProduct({{ row.product.id }}, '{{ row.product.name }}', '{{ row.product.sku }}', '{{ row.product.barcode or '' }}', {{ row.product.price }}, '{{ row.product.category }}', {{ row.product.department_id or '' }}, {{ row.product.cost_price }}, {{ row.product.reorder_level }}, '{{ row.product.special_pricing_group or '' }}', {{ row.product.tax_rate_id or '' }})" 
-                  class="text-xs px-3 py-1 border rounded-2xl hover:bg-slate-50 mr-1">Edit</button>
+          <button class="edit-product-btn text-xs px-3 py-1 border rounded-2xl hover:bg-slate-50 mr-1"
+                  data-id="{{ row.product.id }}"
+                  data-name="{{ row.product.name }}"
+                  data-sku="{{ row.product.sku }}"
+                  data-barcode="{{ row.product.barcode or '' }}"
+                  data-price="{{ row.product.price }}"
+                  data-category="{{ row.product.category or '' }}"
+                  data-department-id="{{ row.product.department_id or '' }}"
+                  data-cost="{{ row.product.cost_price }}"
+                  data-reorder="{{ row.product.reorder_level }}"
+                  data-special-group="{{ row.product.special_pricing_group or '' }}"
+                  data-tax-rate-id="{{ row.product.tax_rate_id or '' }}"
+                  data-pack-size="{{ row.product.pack_size or 1 }}"
+                  data-pack-unit="{{ row.product.pack_unit or 'pcs' }}"
+                  data-pack-cost="{{ row.product.pack_cost or 0 }}"
+                  data-supplier-id="{{ row.product.supplier_id or '' }}"
+                  data-unit="{{ row.product.unit or 'pcs' }}">
+            Edit
+          </button>
           <button onclick="showMovementSummary({{ row.product.id }}, '{{ row.product.name }}')" 
                   class="text-xs px-3 py-1 border rounded-2xl hover:bg-emerald-50 text-emerald-700 mr-1" title="View all stock movements and sales history">History</button>
           <button onclick="showTransferModal({{ row.product.id }}, '{{ row.product.name }}')" 
@@ -108,7 +130,7 @@
 
 <!-- Add / Edit Product Modal -->
 <div id="add-product-modal" class="hidden fixed inset-0 bg-black/70 z-[130] flex items-center justify-center p-4">
-  <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl overflow-hidden">
+  <div class="bg-white w-full max-w-2xl rounded-3xl shadow-xl overflow-hidden">
     
     <!-- Header -->
     <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
@@ -117,20 +139,29 @@
               class="text-slate-400 hover:text-slate-600 text-xl leading-none">&times;</button>
     </div>
 
-    <div class="p-6 space-y-6 text-sm">
+    <!-- Tabs for the form to reduce clutter -->
+    <div class="px-6 pt-4">
+      <div class="flex border-b mb-1 text-sm">
+        <button type="button" onclick="switchProductTab('general')" class="product-tab px-4 py-2 font-medium border-b-2 border-[#0A4D68] text-[#0A4D68]" data-tab="general">General &amp; Pricing</button>
+        <button type="button" onclick="switchProductTab('stock')" class="product-tab px-4 py-2 font-medium text-slate-500 hover:text-slate-700" data-tab="stock">Stock &amp; Packs</button>
+        <button type="button" onclick="switchProductTab('supplier')" class="product-tab px-4 py-2 font-medium text-slate-500 hover:text-slate-700" data-tab="supplier">Supplier &amp; Other</button>
+        <button type="button" onclick="switchProductTab('barcodes')" class="product-tab px-4 py-2 font-medium text-slate-500 hover:text-slate-700" data-tab="barcodes">Barcodes</button>
+      </div>
+    </div>
 
-      <!-- Basic Information -->
-      <div>
-        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">BASIC INFORMATION</div>
-        <div class="space-y-4">
+    <div class="p-6 pt-4 text-sm">
+
+      <!-- Tab: General & Pricing (merged as requested) -->
+      <div class="product-tab-content" data-tab="general">
+        <!-- Basic / General -->
+        <div class="grid grid-cols-1 gap-4">
           <div>
             <label class="block text-xs font-medium text-slate-600 mb-1">Product Name <span class="text-red-500">*</span></label>
             <input id="np-name" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
           </div>
-
           <div class="grid grid-cols-2 gap-4">
             <div>
-              <label class="block text-xs font-medium text-slate-600 mb-1">SKU (optional)</label>
+              <label class="block text-xs font-medium text-slate-600 mb-1">SKU</label>
               <input id="np-sku" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
             </div>
             <div>
@@ -139,81 +170,124 @@
             </div>
           </div>
         </div>
-      </div>
 
-      <!-- Pricing -->
-      <div>
-        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">PRICING</div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Selling Price (Inc. Tax / VIP - what customer pays) <span class="text-red-500">*</span></label>
-            <input id="np-price" type="number" step="0.01" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
-          </div>
-          <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Cost Price</label>
-            <input id="np-cost" type="number" step="0.01" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
-          </div>
-        </div>
-      </div>
-
-      <!-- Classification -->
-      <div>
-        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">CLASSIFICATION</div>
-        <div class="grid grid-cols-2 gap-4">
-          <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Department</label>
-            <div class="flex gap-1">
-              <select id="np-department" class="flex-1 border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
-                <option value="">-- No Department --</option>
-                {% for d in departments %}
-                <option value="{{ d.id }}">{{ d.name }}</option>
-                {% endfor %}
-              </select>
-              <button type="button" onclick="quickAddDepartment()" 
-                      class="px-3 border rounded-2xl hover:bg-emerald-50 text-emerald-600 text-lg leading-none flex items-center" 
-                      title="Quick create new department">
-                +
-              </button>
+        <!-- Pricing & Tax -->
+        <div class="mt-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Selling Price (VIP / Inc. Tax)</label>
+              <input id="np-price" type="number" step="0.01" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+              <div class="text-[10px] text-slate-400">What the customer pays</div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Cost Price (VEP)</label>
+              <input id="np-cost" type="number" step="0.01" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+              <div class="text-[10px] text-slate-400">Your purchase cost per unit</div>
             </div>
           </div>
+
+          <div class="mt-4 grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Department</label>
+              <div class="flex gap-1">
+                <select id="np-department" class="flex-1 border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+                  <option value="">-- None --</option>
+                  {% for d in departments %}
+                  <option value="{{ d.id }}">{{ d.name }}</option>
+                  {% endfor %}
+                </select>
+                <button type="button" onclick="quickAddDepartment()" 
+                        class="px-3 border rounded-2xl hover:bg-emerald-50 text-emerald-600 text-lg leading-none flex items-center" 
+                        title="Quick create new department">+</button>
+              </div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Category / Sub-Category</label>
+              <input id="np-category" placeholder="Beverages, Snacks..." class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Tax Rate (per item)</label>
+              <select id="np-tax-rate" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+                <option value="">-- Default (G 12.5%) --</option>
+                {% for tr in tax_rates %}
+                <option value="{{ tr.id }}">{{ tr.label }} ({{ tr.rate }}%)</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">Per-product tax rate controls VIP/VEP calculations on sales and receipts.</p>
+        </div>
+      </div>
+
+      <!-- Tab: Stock & Packs -->
+      <div class="product-tab-content hidden" data-tab="stock">
+        <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-medium text-slate-600 mb-1">Sub-Category</label>
-            <input id="np-category" placeholder="e.g. Beverages, Snacks" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+            <label class="block text-xs font-medium text-slate-600 mb-1">Reorder Level</label>
+            <input id="np-reorder" type="number" value="10" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+            <div class="text-[10px] text-slate-400">Low stock warning when on-hand drops to or below</div>
+          </div>
+          <div>
+            <label class="block text-xs font-medium text-slate-600 mb-1">Default Unit</label>
+            <input id="np-unit" value="pcs" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+            <div class="text-[10px] text-slate-400">pcs, kg, box, etc.</div>
+          </div>
+        </div>
+
+        <div class="mt-4">
+          <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">PACK SIZING (for supplier invoices &amp; receiving)</div>
+          <div class="grid grid-cols-3 gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Pack Size</label>
+              <input id="np-pack-size" type="number" value="1" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+              <div class="text-[10px] text-slate-400">e.g. 24 (pieces per carton)</div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Pack Unit</label>
+              <input id="np-pack-unit" value="pcs" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+              <div class="text-[10px] text-slate-400">e.g. carton, box, pack</div>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-600 mb-1">Pack Cost (reference)</label>
+              <input id="np-pack-cost" type="number" step="0.01" value="0" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+              <div class="text-[10px] text-slate-400">Cost of 1 full pack</div>
+            </div>
           </div>
         </div>
       </div>
 
-      <!-- Tax Rate (per item) -->
-      <div>
-        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">TAX RATE (for this item)</div>
-        <select id="np-tax-rate" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
-          <option value="">-- Use Default Active Tax Rate --</option>
-          {% for tr in tax_rates %}
-          <option value="{{ tr.id }}">{{ tr.label }} ({{ tr.rate }}%)</option>
-          {% endfor %}
-        </select>
-        <p class="text-[10px] text-slate-400 mt-1">This tax rate will be used for all sales of this product (instead of global default).</p>
-      </div>
-
-      <!-- Other -->
-      <div>
-        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider">OTHER</div>
+      <!-- Tab: Supplier & Other -->
+      <div class="product-tab-content hidden" data-tab="supplier">
         <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Default Supplier</label>
+          <select id="np-supplier" class="w-full border rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:border-[#0A4D68]">
+            <option value="">-- No Default Supplier --</option>
+            {% for s in suppliers %}
+            <option value="{{ s.id }}">{{ s.name }}</option>
+            {% endfor %}
+          </select>
+          <p class="text-[10px] text-slate-400 mt-1">Pre-selects this supplier when creating a Supplier Invoice for the item.</p>
+        </div>
+
+        <div class="mt-4">
           <label class="block text-xs font-medium text-slate-600 mb-1">Special Pricing Group</label>
           <input id="np-special-group" placeholder="e.g. family-combo, 500" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
-          <div class="text-[10px] text-slate-400 mt-1">Used for bundle/quantity discounts in POS</div>
+          <div class="text-[10px] text-slate-400 mt-1">Links this item to bundle or quantity discount rules in POS</div>
         </div>
       </div>
 
-      <!-- Alternate Barcodes -->
-      <div>
-        <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider flex items-center justify-between">
-          <span>ALTERNATE BARCODES (Pack Sizes)</span>
-          <button type="button" onclick="showAlternateBarcodeSection()" 
-                  class="text-emerald-600 text-xs hover:underline">Manage</button>
-        </div>
-        <div id="alternate-barcodes-summary" class="text-xs text-slate-500">
-          Loading...
+      <!-- Tab: Barcodes -->
+      <div class="product-tab-content hidden" data-tab="barcodes">
+        <div>
+          <div class="text-xs font-semibold text-slate-500 mb-2 tracking-wider flex items-center justify-between">
+            <span>ALTERNATE BARCODES (Pack Sizes)</span>
+            <button type="button" onclick="showAlternateBarcodeSection()" 
+                    class="text-emerald-600 text-xs hover:underline">Manage</button>
+          </div>
+          <div id="alternate-barcodes-summary" class="text-xs text-slate-500">
+            Loading...
+          </div>
+          <p class="text-[10px] text-slate-400 mt-2">Use the Manage button to add barcodes for different pack sizes (e.g. a carton barcode that adds 24 units).</p>
         </div>
       </div>
 
@@ -325,18 +399,6 @@
 
 {% block scripts %}
 <script>
-async function adjustStock(productId, branchId, newQty) {
-  const res = await fetch('/api/inventory/adjust', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({product_id: productId, branch_id: branchId, new_quantity: parseInt(newQty), reason: 'Manager adjustment'})
-  });
-  const data = await res.json();
-  if (data.success) {
-    showToast('Stock updated');
-  }
-}
-
 function showTransferModal(productId, productName) {
   const from = prompt(`Transfer ${productName}\nFrom Branch ID (1=Suva, 2=Nadi, 3=Lautoka):`, "1");
   const to = prompt("To Branch ID:", "2");
@@ -362,6 +424,7 @@ function showAddProductModal() {
     saveBtn.onclick = createProduct;
   }
   modal.classList.remove('hidden');
+  resetProductTabs();
 }
 
 function hideAddProductModal() {
@@ -375,6 +438,43 @@ function hideAddProductModal() {
     saveBtn.textContent = 'Create Product';
     saveBtn.onclick = createProduct;
   }
+}
+
+// Simple tab switching for the product modal (to stop the form from feeling cluttered)
+function switchProductTab(tabName) {
+  // Hide all contents
+  document.querySelectorAll('.product-tab-content').forEach(el => {
+    el.classList.add('hidden');
+  });
+  // Show the requested one
+  const target = document.querySelector('.product-tab-content[data-tab="' + tabName + '"]');
+  if (target) target.classList.remove('hidden');
+
+  // Update button styles
+  document.querySelectorAll('.product-tab').forEach(btn => {
+    if (btn.dataset.tab === tabName) {
+      btn.classList.add('border-b-2', 'border-[#0A4D68]', 'text-[#0A4D68]');
+      btn.classList.remove('text-slate-500');
+    } else {
+      btn.classList.remove('border-b-2', 'border-[#0A4D68]', 'text-[#0A4D68]');
+      btn.classList.add('text-slate-500');
+    }
+  });
+}
+
+function resetProductTabs() {
+  // Show first tab by default
+  switchProductTab('general');
+}
+
+function filterInventoryTable() {
+  const term = (document.getElementById('inventory-search') || {}).value.toLowerCase().trim() || '';
+  const rows = document.querySelectorAll('#inventory-table tbody tr');
+  rows.forEach(tr => {
+    // Search across the main text content of the row (name, sku, barcode, category, etc.)
+    const txt = (tr.textContent || '').toLowerCase();
+    tr.style.display = !term || txt.includes(term) ? '' : 'none';
+  });
 }
 
 async function createProduct() {
@@ -393,6 +493,10 @@ async function createProduct() {
 
   const deptSelect = document.getElementById('np-department');
   const taxSelect = document.getElementById('np-tax-rate');
+  const supSelect = document.getElementById('np-supplier');
+  const reorderEl = document.getElementById('np-reorder');
+  const unitEl = document.getElementById('np-unit');
+
   const payload = {
     name: name,
     sku: sku,
@@ -402,7 +506,13 @@ async function createProduct() {
     category: document.getElementById('np-category').value,
     department_id: deptSelect && deptSelect.value ? parseInt(deptSelect.value) : null,
     tax_rate_id: taxSelect && taxSelect.value ? parseInt(taxSelect.value) : null,
-    special_pricing_group: document.getElementById('np-special-group').value
+    reorder_level: reorderEl ? parseInt(reorderEl.value) || 10 : 10,
+    unit: unitEl ? unitEl.value || 'pcs' : 'pcs',
+    special_pricing_group: document.getElementById('np-special-group').value,
+    pack_size: parseInt(document.getElementById('np-pack-size').value) || 1,
+    pack_unit: document.getElementById('np-pack-unit').value || 'pcs',
+    pack_cost: parseFloat(document.getElementById('np-pack-cost').value) || 0,
+    supplier_id: supSelect && supSelect.value ? parseInt(supSelect.value) : null
   };
   const res = await fetch('/api/products', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) });
   const data = await res.json();
@@ -593,7 +703,7 @@ async function setBranchPrice(productId, branchId, currentPrice, currentCost) {
 }
 
 // Edit Product
-function editProduct(id, name, sku, barcode, price, category, departmentId, cost, reorder, specialGroup, taxRateId) {
+function editProduct(id, name, sku, barcode, price, category, departmentId, cost, reorder, specialGroup, taxRateId, packSize, packUnit, packCost, supplierId, productUnit) {
   const modal = document.getElementById('add-product-modal');
   window.currentEditingProductId = id;   // for alternate barcodes
   
@@ -623,6 +733,21 @@ function editProduct(id, name, sku, barcode, price, category, departmentId, cost
     taxSelect.value = taxRateId || '';
   }
 
+  // Reorder + Unit (were previously accepted in the row onclick but never shown or saved from the form)
+  const reorderEl = document.getElementById('np-reorder');
+  if (reorderEl) reorderEl.value = reorder || 10;
+
+  const unitEl = document.getElementById('np-unit');
+  if (unitEl) unitEl.value = productUnit || 'pcs';
+
+  // Pack + supplier
+  document.getElementById('np-pack-size').value = packSize || 1;
+  document.getElementById('np-pack-unit').value = packUnit || 'pcs';
+  document.getElementById('np-pack-cost').value = packCost || 0;
+
+  const supSelect = document.getElementById('np-supplier');
+  if (supSelect) supSelect.value = supplierId || '';
+
   // Load alternate barcodes summary
   loadAlternateBarcodeSummary(id);
 
@@ -649,6 +774,10 @@ function editProduct(id, name, sku, barcode, price, category, departmentId, cost
 
       const deptSelect = document.getElementById('np-department');
       const taxSelect = document.getElementById('np-tax-rate');
+      const supSel = document.getElementById('np-supplier');
+      const reorderInput = document.getElementById('np-reorder');
+      const unitInput = document.getElementById('np-unit');
+
       const payload = {
         name: name,
         sku: sku,
@@ -657,7 +786,14 @@ function editProduct(id, name, sku, barcode, price, category, departmentId, cost
         cost_price: parseFloat(document.getElementById('np-cost').value || 0),
         category: document.getElementById('np-category').value,
         department_id: deptSelect && deptSelect.value ? parseInt(deptSelect.value) : null,
-        tax_rate_id: taxSelect && taxSelect.value ? parseInt(taxSelect.value) : null
+        tax_rate_id: taxSelect && taxSelect.value ? parseInt(taxSelect.value) : null,
+        reorder_level: reorderInput ? parseInt(reorderInput.value) || 10 : 10,
+        unit: unitInput ? (unitInput.value || 'pcs') : 'pcs',
+        special_pricing_group: document.getElementById('np-special-group').value,
+        pack_size: parseInt(document.getElementById('np-pack-size').value) || 1,
+        pack_unit: document.getElementById('np-pack-unit').value || 'pcs',
+        pack_cost: parseFloat(document.getElementById('np-pack-cost').value) || 0,
+        supplier_id: supSel && supSel.value ? parseInt(supSel.value) : null
       };
       const res = await fetch(`/api/products/${id}`, { 
         method: 'PUT', 
@@ -675,6 +811,7 @@ function editProduct(id, name, sku, barcode, price, category, departmentId, cost
   }
 
   modal.classList.remove('hidden');
+  resetProductTabs();
 }
 
 async function showMovementSummary(productId, productName) {
@@ -733,6 +870,10 @@ function hideImportExcelModal() {
   document.getElementById('import-excel-modal').classList.add('hidden');
 }
 
+function downloadProductTemplate() {
+  window.location.href = '/api/products/import-template';
+}
+
 async function uploadExcelImport() {
   const fileInput = document.getElementById('excel-file');
   const statusEl = document.getElementById('import-status');
@@ -771,5 +912,32 @@ async function uploadExcelImport() {
     statusEl.className = "mt-3 text-xs text-center text-red-600";
   }
 }
+
+// Bind Edit buttons safely using data-* attributes.
+// This prevents the onclick from breaking on special characters (apostrophes etc.) in product names/SKUs.
+document.querySelectorAll('.edit-product-btn').forEach(function(btn) {
+  btn.addEventListener('click', function(ev) {
+    ev.preventDefault();
+    const d = this.dataset;
+    editProduct(
+      parseInt(d.id) || 0,
+      d.name || '',
+      d.sku || '',
+      d.barcode || '',
+      parseFloat(d.price) || 0,
+      d.category || '',
+      d.departmentId || '',
+      parseFloat(d.cost) || 0,
+      parseInt(d.reorder) || 10,
+      d.specialGroup || '',
+      d.taxRateId || '',
+      parseInt(d.packSize) || 1,
+      d.packUnit || 'pcs',
+      parseFloat(d.packCost) || 0,
+      d.supplierId || '',
+      d.unit || 'pcs'
+    );
+  });
+});
 </script>
 {% endblock %}

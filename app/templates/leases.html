@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}Leases{% endblock %}
+
+{% block content %}
+<div class="flex justify-between items-center mb-6">
+  <div>
+    <h1 class="text-3xl font-semibold tracking-tight">Leases &amp; Agreements</h1>
+    <p class="text-slate-500">Track tenant leases. Use "Generate Recurring Charges" to auto-create monthly rent charges for active leases.</p>
+  </div>
+  <div class="flex gap-2">
+    <button onclick="generateCharges()" class="px-4 py-2 bg-emerald-600 text-white rounded-2xl text-sm">Generate Monthly Charges</button>
+    <button onclick="showLeaseModal()" class="px-5 py-2 bg-[#0A4D68] text-white rounded-2xl flex items-center gap-x-2">
+      <i class="fa-solid fa-plus"></i> New Lease
+    </button>
+  </div>
+</div>
+
+<div class="bg-white rounded-3xl border overflow-hidden">
+  <table class="w-full text-sm">
+    <thead class="bg-slate-50">
+      <tr>
+        <th class="px-5 py-3">Tenant / Property</th>
+        <th class="px-4 py-3">Period</th>
+        <th class="px-4 py-3 text-right">Rent</th>
+        <th class="px-5 py-3">Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for l in leases %}
+      <tr class="border-t">
+        <td class="px-5 py-3">{{ l.tenant.name if l.tenant else '' }} / {{ l.property.name if l.property else '' }}</td>
+        <td class="px-4 py-3 text-xs">{{ l.start_date.strftime('%Y-%m-%d') if l.start_date else '' }} to {{ l.end_date.strftime('%Y-%m-%d') if l.end_date else 'open' }}</td>
+        <td class="px-4 py-3 text-right">FJD {{ "%.2f"|format(l.rent_amount or 0) }}</td>
+        <td class="px-5 py-3">{{ 'Active' if l.is_active else 'Inactive' }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="4" class="text-center py-6 text-slate-400">No leases yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<!-- Lease Modal -->
+<div id="lease-modal" class="hidden fixed inset-0 bg-black/60 z-[150] flex items-center justify-center">
+  <div class="bg-white w-full max-w-md rounded-3xl p-6">
+    <div class="font-semibold text-lg mb-4">New Lease</div>
+    <form id="lease-form" onsubmit="saveLease(event)">
+      <div class="space-y-3 text-sm">
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Tenant *</label>
+          <select id="lease-tenant" required class="w-full border rounded-2xl px-4 py-2">
+            {% for t in tenants %}
+            <option value="{{ t.id }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Property *</label>
+          <select id="lease-prop" required class="w-full border rounded-2xl px-4 py-2">
+            {% for p in properties %}
+            <option value="{{ p.id }}">{{ p.name }} ({{ p.barcode }})</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="text-xs font-semibold text-slate-500">Start Date</label>
+            <input type="date" id="lease-start" class="w-full border rounded-2xl px-4 py-2">
+          </div>
+          <div>
+            <label class="text-xs font-semibold text-slate-500">End Date</label>
+            <input type="date" id="lease-end" class="w-full border rounded-2xl px-4 py-2">
+          </div>
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Rent Amount</label>
+          <input type="number" step="0.01" id="lease-rent" class="w-full border rounded-2xl px-4 py-2">
+        </div>
+        <div>
+          <label class="text-xs font-semibold text-slate-500">Terms</label>
+          <textarea id="lease-terms" rows="2" class="w-full border rounded-2xl px-4 py-2"></textarea>
+        </div>
+      </div>
+      <div class="flex gap-2 mt-5">
+        <button type="button" onclick="hideLeaseModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+        <button type="submit" class="flex-1 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-semibold">Save Lease</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function showLeaseModal() { document.getElementById('lease-modal').classList.remove('hidden'); }
+function hideLeaseModal() { document.getElementById('lease-modal').classList.add('hidden'); }
+
+async function saveLease(e) {
+  e.preventDefault();
+  const payload = {
+    tenant_id: parseInt(document.getElementById('lease-tenant').value),
+    property_id: parseInt(document.getElementById('lease-prop').value),
+    start_date: document.getElementById('lease-start').value,
+    end_date: document.getElementById('lease-end').value,
+    rent_amount: parseFloat(document.getElementById('lease-rent').value) || 0,
+    terms: document.getElementById('lease-terms').value
+  };
+  const res = await fetch('/api/leases', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+  if ((await res.json()).success) { location.reload(); } else alert('Failed');
+}
+
+async function generateCharges() {
+  if (!confirm('Generate recurring charges for all active leases?')) return;
+  const res = await fetch('/api/leases/generate-charges', {method:'POST'});
+  const data = await res.json();
+  alert('Created ' + (data.created || 0) + ' charges');
+  location.reload();
+}
+</script>
+{% endblock %}

@@ -10,14 +10,32 @@
 <body class="bg-slate-950 flex items-center justify-center min-h-screen">
   <div class="w-full max-w-md px-6">
     <div class="text-center mb-8">
+      {% if current_database %}
+      <div class="mb-3">
+        <span class="inline-flex items-center gap-x-2 px-4 py-1 bg-slate-800 text-emerald-400 text-xs font-mono rounded-2xl border border-slate-700">
+          <i class="fa-solid fa-database"></i>
+          <span class="font-semibold">{{ current_database }}</span>
+        </span>
+      </div>
+      {% endif %}
       <div class="inline-flex items-center justify-center w-14 h-14 bg-white rounded-2xl mb-4">
         <i class="fa-solid fa-receipt text-3xl text-[#0A4D68]"></i>
       </div>
       <h1 class="text-white text-3xl font-semibold tracking-tighter">Cloud IT POS</h1>
-      <p class="text-slate-400 mt-1">Fiji Revenue &amp; Customs Service</p>
     </div>
 
     <div class="bg-white rounded-3xl p-8 shadow-2xl">
+      {% if is_fresh_db|default(false) %}
+      <div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-2xl text-sm">
+        <div class="font-semibold text-amber-700 flex items-center gap-x-2">
+          <i class="fa-solid fa-exclamation-triangle"></i>
+          <span>This is a brand new database that has not been set up yet.</span>
+        </div>
+        <p class="mt-1 text-amber-600">You must complete the initial setup (create your first branch and admin account) before normal login.</p>
+        <a href="{{ url_for('setup') }}" class="mt-3 inline-block px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-semibold rounded-2xl">Go to Setup Wizard</a>
+      </div>
+      {% endif %}
+
       <div class="mb-6">
         <div class="text-xl font-semibold">Sign in to continue</div>
         <div class="text-sm text-slate-500">Staff / Manager / Admin access</div>
@@ -36,12 +54,12 @@
       <form method="POST" action="{{ url_for('login') }}" class="space-y-4">
         <div>
           <label class="block text-xs font-semibold text-slate-500 mb-1">USERNAME</label>
-          <input type="text" name="username" value="admin" required 
+          <input type="text" name="username" required 
                  class="w-full border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[#0A4D68]">
         </div>
         <div>
           <label class="block text-xs font-semibold text-slate-500 mb-1">PASSWORD</label>
-          <input type="password" name="password" value="admin123" required 
+          <input type="password" name="password" required 
                  class="w-full border rounded-2xl px-4 py-3 text-sm focus:outline-none focus:border-[#0A4D68]">
         </div>
         <button type="submit" 
@@ -51,7 +69,14 @@
       </form>
 
       <div class="mt-6 text-xs text-slate-400 text-center">
-        Demo accounts: <span class="font-mono">admin / admin123</span>
+        Use the administrator account you created during Setup. (Early demo example was admin / admin123)
+      </div>
+
+      <div class="mt-3 text-center">
+        <a href="{{ url_for('choose_database') }}" class="inline-flex items-center gap-1 text-xs text-[#0A4D68] hover:underline">
+          <i class="fa-solid fa-database"></i>
+          <span>Switch / Create Database</span>
+        </a>
       </div>
 
       <!-- Help Button -->

@@ -5,21 +5,23 @@
   <title>Receipt {{ order.id }}</title>
   <style>
     /* =============================================
-       Cloud IT POS - RECEIPT TEMPLATE
+       Cloud IT POS - RECEIPT TEMPLATE (Composer 2.5 Model)
        =============================================
-       YOU HAVE 100% CONTROL HERE.
+       The Visual Drag & Drop Composer (receipt-designer) now fully drives output when a layout is saved.
 
        How to customize:
-       1. Edit this file directly for full layout/design freedom (recommended for advanced changes).
-       2. Common options (company name, header, footer, logo, show/hide sections) are also controllable from Settings → Receipt Design.
-       3. For 80mm thermal printers: keep this narrow and use small fonts.
-       4. For A4: more space and bigger fonts are used automatically.
+       1. Use Settings → Receipt Design → "Open Visual Drag & Drop Receipt Designer" for mouse-driven control (Composer 2.5).
+       2. Edit this file directly for full layout/design freedom beyond the composer (advanced users).
+       3. Common options (company name, header, footer, logo, show/hide) controllable from Settings.
+       4. 80mm thermal vs A4 controlled by ReceiptConfig.layout (and preview in designer).
 
-       Variables available:
-       - order, order.items, order.branch, order.debtor
-       - fiscal (may be None)
-       - config (ReceiptConfig)
-       - is_real_vms (boolean — only show heavy fiscal block when True)
+       When a receipt_layout (from composer) is present and non-empty, this template renders dynamically using the saved sections.
+       Otherwise falls back to the rich static layout below (for compatibility).
+
+       Passed to template (Composer 2.5):
+       - receipt_layout (dict of section -> list of {key,label} or {type:'freetext', text})
+       - layout_version
+       - get_receipt_field(key) -> value string
     */
 
     @page {
@@ -186,7 +188,9 @@
         {% endif %}
 
         <div style="margin-top: 4px; font-weight: 700; font-size: 9pt;">
-          {% if is_real_vms and fiscal %}
+          {% if order.order_type == 'return' or (order.total or 0) < 0 %}
+            CREDIT NOTE / RETURN — {% if is_real_vms and fiscal %}FRCS VMS FISCAL{% else %}ADJUSTMENT{% endif %}
+          {% elif is_real_vms and fiscal %}
             OFFICIAL FISCAL RECEIPT — FRCS VMS
           {% else %}
             TAX INVOICE / RECEIPT
@@ -195,37 +199,168 @@
       </div>
     {% endif %}
 
-    <!-- You can freely add more header fields here (address, phone, email, slogan, etc.) -->
+    <!-- ============ COMPOSER 2.5 MODEL: DYNAMIC vs FALLBACK ============ -->
+    {% set has_layout = receipt_layout and (receipt_layout | length) > 0 %}
 
-    <!-- ============ META INFORMATION ============ -->
-    <div class="meta">
-      <strong>Receipt #{{ order.id }}</strong><br>
-      Date: {{ order.created_at.strftime('%d %b %Y %H:%M') }}<br>
-      {% if order.branch %}
-        Branch: {{ order.branch.name }} (TIN: {{ order.branch.tin or 'N/A' }})<br>
-        VMS UID: {{ order.branch.vms_uid or 'N/A' }}
-      {% endif %}
-    </div>
-
-    <!-- ============ CUSTOMER / DEBTOR ============ -->
-    {% if order.customer_name and order.customer_name|lower not in ['cash customer', 'cash'] %}
-    <div class="section">
-      <div class="section-title">
-        {% if order.debtor_id %}DEBTOR (ON ACCOUNT){% else %}CUSTOMER{% endif %}
-      </div>
-      <div>
-        {{ order.customer_name }}<br>
-        {% if order.customer_tin %}TIN: {{ order.customer_tin }}<br>{% endif %}
-        {% if order.debtor %}
-          {% if order.debtor.phone %}Phone: {{ order.debtor.phone }}<br>{% endif %}
-          {% if order.debtor.address %}Address: {{ order.debtor.address }}<br>{% endif %}
-          {% if order.debtor.outstanding_balance is defined %}
-            Balance after sale: <strong>FJD {{ "%.2f"|format(order.debtor.outstanding_balance or 0) }}</strong>
+    {% if has_layout %}
+      {# ========== COMPOSER 2.5 DYNAMIC RENDERING ========== #}
+      {% set section_order = ['header', 'seller', 'customer', 'items', 'totals', 'fiscal', 'footer'] %}
+      {% for sec in section_order %}
+        {% set sec_items = receipt_layout.get(sec, []) %}
+        {% if sec_items %}
+          {% if sec == 'header' %}
+            <div class="header" style="border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:6px; text-align:center;">
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div style="color:#444; font-size:8.5pt;">{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  <div style="font-size:9pt;"><strong>{{ it.label or it.get('label', it.get('key','')) }}</strong>: {{ get_receipt_field(it.key or it.get('key','')) }}</div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% elif sec == 'seller' %}
+            <div class="section">
+              <div class="section-title">SELLER / BRANCH</div>
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div class="small">{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  <div>{{ it.label or it.get('label', '') }}: <strong>{{ get_receipt_field(it.key or it.get('key','')) }}</strong></div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% elif sec == 'customer' %}
+            <div class="section">
+              <div class="section-title">CUSTOMER / DEBTOR</div>
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div class="small">{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  <div>{{ it.label or it.get('label', '') }}: <strong>{{ get_receipt_field(it.key or it.get('key','')) }}</strong></div>
+                {% endif %}
+              {% endfor %}
+            </div>
+          {% elif sec == 'items' %}
+            <div class="section">
+              <div class="section-title">ITEMS</div>
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div class="small" style="margin:2px 0;">{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  <div class="small">{{ it.label or it.get('label','') }}: {{ get_receipt_field(it.key or it.get('key','')) }}</div>
+                {% endif %}
+              {% endfor %}
+              <table class="items" style="margin-top:4px;">
+                <thead>
+                  <tr>
+                    <th style="width:42%;">Item</th>
+                    <th style="width:10%;" class="text-center">Qty</th>
+                    <th style="width:16%;" class="text-right">Unit (VIP)</th>
+                    <th style="width:12%;" class="text-center">Tax</th>
+                    <th style="width:20%;" class="text-right">Line Total (VIP)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for item in order.items %}
+                  <tr>
+                    <td>{{ item.product_name }}</td>
+                    <td class="text-center">{{ item.quantity }}</td>
+                    <td class="text-right">{{ "%.2f"|format(item.unit_price) }}</td>
+                    <td class="text-center">
+                      {% set tr = item.product.tax_rate if item.product else None %}
+                      {% if tr %}
+                        <span style="font-size:7pt; background:#e0f2ce; padding:1px 4px; border-radius:3px;">{{ tr.label }} {{ tr.rate }}%</span>
+                      {% else %}
+                        <span style="font-size:7pt; color:#888;">Default</span>
+                      {% endif %}
+                    </td>
+                    <td class="text-right">{{ "%.2f"|format(item.line_total) }}</td>
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+          {% elif sec == 'totals' %}
+            <div class="totals">
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div class="totals-row small">{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  {% set kk = (it.key or it.get('key','')) | lower %}
+                  {% if 'subtotal' in kk %}
+                    <div class="totals-row"><div>Subtotal (VEP)</div><div>FJD {{ get_receipt_field('order.subtotal') }}</div></div>
+                  {% elif 'vat' in kk or 'tax' in kk %}
+                    <div class="totals-row small"><div>Tax / VAT</div><div>FJD {{ get_receipt_field('order.vat') }}</div></div>
+                  {% elif 'total' in kk %}
+                    <div class="totals-row total"><div>TOTAL (VIP)</div><div>FJD {{ get_receipt_field('order.total') }}</div></div>
+                  {% else %}
+                    <div class="totals-row small"><div>{{ it.label or it.get('label', kk) }}</div><div>{{ get_receipt_field(it.key or it.get('key','')) }}</div></div>
+                  {% endif %}
+                {% endif %}
+              {% endfor %}
+              {% if sec_items|length == 0 %}
+                <div class="totals-row"><div>Subtotal (VEP)</div><div>FJD {{ "%.2f"|format(order.subtotal or 0) }}</div></div>
+                <div class="totals-row total"><div>TOTAL (VIP)</div><div>FJD {{ "%.2f"|format(order.total or 0) }}</div></div>
+              {% endif %}
+            </div>
+          {% elif sec == 'fiscal' %}
+            {% if is_real_vms and fiscal %}
+            <div class="fiscal-block">
+              <div style="text-align:center; font-weight:700; margin-bottom:3px; border-bottom:1px solid #000; padding-bottom:2px;">FRCS VMS — OFFICIAL FISCAL INVOICE</div>
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div class="small">{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  <div class="small"><strong>{{ it.label or it.get('label','') }}:</strong> {{ get_receipt_field(it.key or it.get('key','')) }}</div>
+                {% endif %}
+              {% endfor %}
+              {% if not sec_items %}
+                {% if fiscal.sdc_no %}<div><strong>SDC No:</strong> {{ fiscal.sdc_no }}</div>{% endif %}
+                {% if fiscal.signature %}<div class="small"><strong>Signature:</strong> {{ fiscal.signature[:52] }}{% if (fiscal.signature|length)>52 %}...{% endif %}</div>{% endif %}
+              {% endif %}
+              <div style="margin-top:3px; font-size:7pt; text-align:center;">Cryptographically signed &amp; transmitted to FRCS VMS.</div>
+            </div>
+            {% endif %}
+          {% elif sec == 'footer' %}
+            <div class="footer">
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}
+                  <div>{{ it.text or it.get('text','') }}</div>
+                {% else %}
+                  <div>{{ it.label or it.get('label','') }}: {{ get_receipt_field(it.key or it.get('key','')) }}</div>
+                {% endif %}
+              {% endfor %}
+              {% if not sec_items and config.footer_text %}
+                {{ config.footer_text }}
+              {% endif %}
+            </div>
+          {% else %}
+            <div class="section">
+              <div class="section-title">{{ sec | upper }}</div>
+              {% for it in sec_items %}
+                {% if it.type == 'freetext' or it.get('type') == 'freetext' %}<div class="small">{{ it.text or it.get('text','') }}</div>
+                {% else %}<div>{{ it.label or it.get('label','') }}: <strong>{{ get_receipt_field(it.key or it.get('key','')) }}</strong></div>{% endif %}
+              {% endfor %}
+            </div>
           {% endif %}
         {% endif %}
+      {% endfor %}
+
+      {# payment summary if no explicit footer/fiscal in layout #}
+      {% if not receipt_layout.get('footer') %}
+      <div class="section small" style="margin-top:2px;">
+        <strong>Payment:</strong> {{ (order.payment_method or 'CASH')|upper }}{% if order.payment_ref %} ({{ order.payment_ref }}){% endif %}
       </div>
-    </div>
-    {% endif %}
+      {% endif %}
+
+      {% if not (is_real_vms and fiscal) and not receipt_layout.get('fiscal') %}
+      <div style="margin-top:6px; font-size:7pt; text-align:center; color:#555;">Simulated fiscal receipt — not transmitted to FRCS VMS.</div>
+      {% endif %}
+
+    {% else %}
+    <!-- Legacy static layout (used when no receipt_layout saved via Composer 2.5) -->
+
+    <!-- You can freely add more header fields here (address, phone, email, slogan, etc.) -->
 
     <!-- ============ ITEMS TABLE ============ -->
     <div class="section">
@@ -328,6 +463,8 @@
       Simulated fiscal receipt — not transmitted to FRCS VMS.
     </div>
     {% endif %}
+
+    {% endif %} {# close the big {% if has_layout %} else: static legacy #}
 
   </div>
 </body>

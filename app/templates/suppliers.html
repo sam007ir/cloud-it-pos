@@ -5,31 +5,58 @@
 {% block content %}
 <div class="flex justify-between items-center mb-6">
   <h1 class="text-3xl font-semibold tracking-tight">Suppliers</h1>
-  {% if user.role == 'admin' %}
-  <button onclick="showAddSupplier()" class="px-5 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm">+ Add Supplier</button>
-  {% endif %}
+  <div class="flex gap-2">
+    {% if user.role == 'admin' %}
+    <button onclick="downloadSupplierTemplate()" class="px-4 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+      <i class="fa-solid fa-download"></i> Download Template
+    </button>
+    <button onclick="showSupplierImportModal()" class="px-4 py-2 border border-emerald-600 text-emerald-700 hover:bg-emerald-50 rounded-2xl text-sm font-semibold flex items-center gap-x-2">
+      <i class="fa-solid fa-file-excel"></i> Import Excel
+    </button>
+    <button onclick="showAddSupplier()" class="px-5 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm">+ Add Supplier</button>
+    {% endif %}
+  </div>
+</div>
+
+<div id="supplier-import-modal" class="hidden fixed inset-0 bg-black/70 z-[145] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl p-6">
+    <div class="font-semibold mb-4">Import Suppliers from Excel</div>
+    <input type="file" id="supplier-excel-file" accept=".xlsx" class="w-full border rounded-2xl p-3 text-sm mb-4">
+    <div class="flex gap-2">
+      <button onclick="hideSupplierImportModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+      <button onclick="importSuppliersExcel()" class="flex-1 py-2.5 bg-emerald-600 text-white rounded-2xl">Import</button>
+    </div>
+    <div id="supplier-import-status" class="mt-3 text-xs text-center hidden"></div>
+  </div>
+</div>
+
+<div class="mb-2">
+  <input type="text" id="supplier-list-search" onkeyup="filterSupplierList()" 
+         class="w-full max-w-sm border rounded-2xl px-4 py-2 text-sm" placeholder="Filter suppliers by name, code or phone...">
 </div>
 
 <div class="bg-white rounded-3xl border overflow-hidden">
   <table class="w-full text-sm">
     <thead class="bg-slate-50">
       <tr>
-        <th class="px-6 py-4 text-left">Name</th>
-        <th class="px-4 py-4">Contact</th>
-        <th class="px-4 py-4">Phone / Email</th>
-        <th class="px-4 py-4">Address</th>
+        <th class="px-4 py-4 text-left">Code</th>
+        <th class="px-4 py-4 text-left">Name / Contact</th>
+        <th class="px-4 py-4">Phone(s)</th>
+        <th class="px-4 py-4 text-left">Address</th>
+        <th class="px-4 py-4">Category / Group</th>
       </tr>
     </thead>
     <tbody class="divide-y">
       {% for s in suppliers %}
       <tr>
-        <td class="px-6 py-4 font-medium">{{ s.name }}</td>
-        <td class="px-4 py-4">{{ s.contact_person or '-' }}</td>
-        <td class="px-4 py-4 text-xs">{{ s.phone or '' }}<br>{{ s.email or '' }}</td>
-        <td class="px-4 py-4 text-xs text-slate-600">{{ s.address or '' }}</td>
+        <td class="px-4 py-4 font-mono text-xs">{{ s.main_code or '-' }}<br><span class="text-[10px] text-slate-400">{{ s.second_code or '' }}</span></td>
+        <td class="px-4 py-4">{{ s.name }}<br><span class="text-xs text-slate-500">{{ s.contact_person or '' }}</span></td>
+        <td class="px-4 py-4 text-xs">{{ s.phone or '' }}{% if s.phone2 %}<br>{{ s.phone2 }}{% endif %}</td>
+        <td class="px-4 py-4 text-xs text-slate-600">{{ s.address or '' }}{% if s.address2 %}<br>{{ s.address2 }}{% endif %}{% if s.address3 %}<br>{{ s.address3 }}{% endif %}</td>
+        <td class="px-4 py-4 text-xs">{{ s.category or '' }}{% if s.discount_group %}<br><span class="text-emerald-600">{{ s.discount_group }}</span>{% endif %}</td>
       </tr>
       {% else %}
-      <tr><td colspan="4" class="px-6 py-8 text-center text-slate-400">No suppliers yet.</td></tr>
+      <tr><td colspan="5" class="px-6 py-8 text-center text-slate-400">No suppliers yet.</td></tr>
       {% endfor %}
     </tbody>
   </table>
@@ -45,6 +72,17 @@
     </div>
 
     <div class="p-6 space-y-5 text-sm">
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Main Code (auto if blank)</label>
+          <input id="sup-main-code" placeholder="SUP-0001" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Second Code</label>
+          <input id="sup-second-code" class="w-full border rounded-2xl px-4 py-2.5 font-mono focus:outline-none focus:border-[#0A4D68]">
+        </div>
+      </div>
+
       <div>
         <label class="block text-xs font-medium text-slate-600 mb-1">Supplier Name <span class="text-red-500">*</span></label>
         <input id="sup-name" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
@@ -57,18 +95,44 @@
 
       <div class="grid grid-cols-2 gap-4">
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Phone</label>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Phone 1</label>
           <input id="sup-phone" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
         </div>
         <div>
-          <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
-          <input id="sup-email" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+          <label class="block text-xs font-medium text-slate-600 mb-1">Phone 2</label>
+          <input id="sup-phone2" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
         </div>
       </div>
 
       <div>
-        <label class="block text-xs font-medium text-slate-600 mb-1">Address</label>
-        <input id="sup-address" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        <label class="block text-xs font-medium text-slate-600 mb-1">Email</label>
+        <input id="sup-email" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Address Line 1</label>
+          <input id="sup-address" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Address Line 2</label>
+          <input id="sup-address2" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Address Line 3</label>
+          <input id="sup-address3" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+      </div>
+
+      <div class="grid grid-cols-2 gap-4">
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Category</label>
+          <input id="sup-category" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
+        <div>
+          <label class="block text-xs font-medium text-slate-600 mb-1">Discount Group</label>
+          <input id="sup-discount-group" placeholder="If applicable" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
+        </div>
       </div>
     </div>
 
@@ -85,15 +149,75 @@ function hideSupplierModal() { document.getElementById('supplier-modal').classLi
 
 async function saveSupplier() {
   const payload = {
+    main_code: document.getElementById('sup-main-code').value,
+    second_code: document.getElementById('sup-second-code').value,
     name: document.getElementById('sup-name').value,
     contact_person: document.getElementById('sup-contact').value,
     phone: document.getElementById('sup-phone').value,
+    phone2: document.getElementById('sup-phone2').value,
     email: document.getElementById('sup-email').value,
-    address: document.getElementById('sup-address').value
+    address: document.getElementById('sup-address').value,
+    address2: document.getElementById('sup-address2').value,
+    address3: document.getElementById('sup-address3').value,
+    category: document.getElementById('sup-category').value,
+    discount_group: document.getElementById('sup-discount-group').value
   };
   const res = await fetch('/api/suppliers', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
   const data = await res.json();
   if (data.success) { location.reload(); } else { alert('Failed'); }
+}
+
+function downloadSupplierTemplate() {
+  window.location.href = '/api/suppliers/import-template';
+}
+
+function showSupplierImportModal() {
+  document.getElementById('supplier-import-modal').classList.remove('hidden');
+  document.getElementById('supplier-import-status').classList.add('hidden');
+  document.getElementById('supplier-excel-file').value = '';
+}
+
+function filterSupplierList() {
+  const term = (document.getElementById('supplier-list-search') || {}).value.toLowerCase().trim() || '';
+  document.querySelectorAll('.bg-white.rounded-3xl.border.overflow-hidden table tbody tr').forEach(tr => {
+    const txt = (tr.textContent || '').toLowerCase();
+    tr.style.display = !term || txt.includes(term) ? '' : 'none';
+  });
+}
+
+function filterDebtorList() {
+  // also defined in debtors page; harmless duplicate
+  const term = (document.getElementById('debtor-list-search') || {}).value.toLowerCase().trim() || '';
+  document.querySelectorAll('table tbody tr').forEach(tr => {
+    const txt = (tr.textContent || '').toLowerCase();
+    tr.style.display = !term || txt.includes(term) ? '' : 'none';
+  });
+}
+
+function hideSupplierImportModal() {
+  document.getElementById('supplier-import-modal').classList.add('hidden');
+}
+
+async function importSuppliersExcel() {
+  const fileInput = document.getElementById('supplier-excel-file');
+  const statusEl = document.getElementById('supplier-import-status');
+  if (!fileInput.files.length) return alert('Select a file');
+
+  const formData = new FormData();
+  formData.append('file', fileInput.files[0]);
+
+  statusEl.textContent = 'Importing...';
+  statusEl.classList.remove('hidden');
+
+  const res = await fetch('/api/suppliers/import-excel', { method: 'POST', body: formData });
+  const data = await res.json();
+
+  if (data.success) {
+    statusEl.textContent = `Success! Imported/updated ${data.imported} suppliers.`;
+    setTimeout(() => { hideSupplierImportModal(); location.reload(); }, 1200);
+  } else {
+    statusEl.textContent = 'Error: ' + (data.message || 'Import failed');
+  }
 }
 </script>
 {% endblock %}

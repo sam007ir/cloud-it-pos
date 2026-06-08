@@ -24,6 +24,8 @@ class Branch(db.Model):
     vms_uid = db.Column(db.String(30))      # VMS Device/Branch UID
     phone = db.Column(db.String(30))
     is_active = db.Column(db.Boolean, default=True)
+    vms_disabled = db.Column(db.Boolean, default=False)  # If true, skip all VMS/fiscal
+    allow_negative_stock = db.Column(db.Boolean, default=False)  # Allow sales with 0 or negative stock
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationship for certificate
@@ -43,12 +45,17 @@ class Product(db.Model):
     special_pricing_group = db.Column(db.String(50))
     department_id = db.Column(db.Integer, db.ForeignKey('department.id'), nullable=True)  # New structured classification
     tax_rate_id = db.Column(db.Integer, db.ForeignKey('tax_rate.id'), nullable=True)      # Per-item tax rate (critical for correct VAT calc)
+    supplier_id = db.Column(db.Integer, db.ForeignKey('supplier.id'), nullable=True)      # Default supplier for this item
+    pack_size = db.Column(db.Integer, default=1)          # e.g. 24 pieces per carton
+    pack_unit = db.Column(db.String(20), default='pcs')   # e.g. 'carton', 'box'
+    pack_cost = db.Column(db.Float, default=0.0)          # Cost for one full pack
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Branch-specific pricing
     branch_prices = db.relationship('ProductBranchPrice', backref='product', lazy=True, cascade='all, delete-orphan')
     department = db.relationship('Department', backref='products')
     tax_rate = db.relationship('TaxRate', backref='products')
+    supplier = db.relationship('Supplier', backref='products')
 
 class Inventory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -159,11 +166,18 @@ class VMSLog(db.Model):
 
 class Supplier(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    main_code = db.Column(db.String(50), unique=True)          # auto generated
+    second_code = db.Column(db.String(50))
     name = db.Column(db.String(150), nullable=False)
-    contact_person = db.Column(db.String(100))
+    contact_person = db.Column(db.String(100))               # contact
     phone = db.Column(db.String(30))
+    phone2 = db.Column(db.String(30))
     email = db.Column(db.String(100))
     address = db.Column(db.String(200))
+    address2 = db.Column(db.String(200))
+    address3 = db.Column(db.String(200))
+    category = db.Column(db.String(50))
+    discount_group = db.Column(db.String(50))                # for special pricing if applicable
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 class Department(db.Model):
@@ -177,7 +191,7 @@ class Department(db.Model):
 class TaxRate(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     label = db.Column(db.String(10))      # A, B, C, etc.
-    rate = db.Column(db.Float)            # 15.0 for 15%
+    rate = db.Column(db.Float)            # 12.5 for default G rate (example)
     description = db.Column(db.String(100))
     is_active = db.Column(db.Boolean, default=True)
 
@@ -219,6 +233,7 @@ class StockTake(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at = db.Column(db.DateTime)
     branch = db.relationship('Branch')
+    items = db.relationship('StockTakeItem', backref='stocktake', cascade='all, delete-orphan')
 
 class StockTakeItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -231,11 +246,19 @@ class StockTakeItem(db.Model):
 
 class Debtor(db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    main_code = db.Column(db.String(50), unique=True)          # auto generated customer code
+    second_code = db.Column(db.String(50))
     name = db.Column(db.String(150))
+    contact_person = db.Column(db.String(100))               # contact
     tin = db.Column(db.String(20))
     phone = db.Column(db.String(30))
+    phone2 = db.Column(db.String(30))
     email = db.Column(db.String(100))
-    address = db.Column(db.String(200))  # Added for full debtor details on receipts & forms
+    address = db.Column(db.String(200))
+    address2 = db.Column(db.String(200))
+    address3 = db.Column(db.String(200))
+    category = db.Column(db.String(50))
+    discount_group = db.Column(db.String(50))                # links to special pricing / discount group
     outstanding_balance = db.Column(db.Float, default=0.0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -323,3 +346,138 @@ class ProductBarcode(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     product = db.relationship('Product', backref='alternate_barcodes')
+
+
+class RentalProperty(db.Model):
+    """Rental properties/units with assigned barcode for quick lookup like POS products.
+    property_type determines tax treatment: 'residential' = VEP (ex-tax), 'commercial' = VIP (inc-tax).
+    Optional per-property tax_rate like products."""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)  # e.g. "Apartment 2B - Sunset Villas"
+    address = db.Column(db.String(250))
+    barcode = db.Column(db.String(50), nullable=False, unique=True)  # Scanned like product barcode in rent collection / POS
+    monthly_rent = db.Column(db.Float, default=0.0)  # base amount; tax treatment per property_type
+    deposit = db.Column(db.Float, default=0.0)
+    status = db.Column(db.String(20), default='available')  # available, occupied, maintenance
+    description = db.Column(db.String(300))
+    property_type = db.Column(db.String(20), default='residential')  # 'residential' (VEP) or 'commercial' (VIP)
+    tax_rate_id = db.Column(db.Integer, db.ForeignKey('tax_rate.id'), nullable=True)
+    current_tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    current_tenant = db.relationship('Tenant', foreign_keys=[current_tenant_id], backref='assigned_properties')
+    tax_rate = db.relationship('TaxRate')
+    photo_base64 = db.Column(db.Text)  # optional photo (base64 like logo)
+
+    def __repr__(self):
+        return f'<RentalProperty {self.barcode} {self.name} ({self.property_type})>'
+
+
+class Tenant(db.Model):
+    """Tenants / renters linked to properties"""
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(150), nullable=False)
+    phone = db.Column(db.String(30))
+    email = db.Column(db.String(100))
+    id_number = db.Column(db.String(50))  # national ID, passport etc.
+    address = db.Column(db.String(250))
+    notes = db.Column(db.String(500))
+    outstanding_balance = db.Column(db.Float, default=0.0)  # current arrears / due rent
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Optional link to main Debtor for unified AR if desired (can sync in future)
+    debtor_id = db.Column(db.Integer, db.ForeignKey('debtor.id'), nullable=True)
+    debtor = db.relationship('Debtor', backref='tenant_record')
+
+
+class RentalCharge(db.Model):
+    """Record of rent charges/dues for a tenant/property (like an invoice line)"""
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey('rental_property.id'), nullable=False)
+    charge_date = db.Column(db.DateTime, default=datetime.utcnow)
+    period_start = db.Column(db.DateTime)
+    period_end = db.Column(db.DateTime)
+    amount = db.Column(db.Float, nullable=False)
+    description = db.Column(db.String(200), default='Monthly Rent')
+    status = db.Column(db.String(20), default='due')  # due, paid, partial, waived
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    tenant = db.relationship('Tenant', backref='rental_charges')
+    property = db.relationship('RentalProperty', backref='charges')
+
+
+class RentalPayment(db.Model):
+    """Payments received for rentals. Uses existing PaymentMethod codes."""
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey('rental_property.id'), nullable=True)
+    payment_date = db.Column(db.DateTime, default=datetime.utcnow)
+    amount = db.Column(db.Float, nullable=False)
+    payment_method = db.Column(db.String(30))  # e.g. CASH, CARD from PaymentMethod.code
+    reference = db.Column(db.String(100))  # receipt #, cheque etc.
+    notes = db.Column(db.String(300))
+    charge_id = db.Column(db.Integer, db.ForeignKey('rental_charge.id'), nullable=True)  # link to specific charge if allocated
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    tenant = db.relationship('Tenant', backref='rental_payments')
+    property = db.relationship('RentalProperty', backref='payments')
+    charge = db.relationship('RentalCharge', backref='payments')
+
+
+class MaintenanceRequest(db.Model):
+    """Maintenance / work orders for rental properties (and potentially other assets)"""
+    id = db.Column(db.Integer, primary_key=True)
+    property_id = db.Column(db.Integer, db.ForeignKey('rental_property.id'), nullable=False)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=True)  # who reported
+    reported_date = db.Column(db.DateTime, default=datetime.utcnow)
+    description = db.Column(db.String(500), nullable=False)
+    priority = db.Column(db.String(20), default='normal')  # low, normal, high, urgent
+    status = db.Column(db.String(20), default='open')  # open, in_progress, completed, cancelled
+    assigned_to_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)
+    estimated_cost = db.Column(db.Float, default=0)
+    actual_cost = db.Column(db.Float, default=0)
+    completed_date = db.Column(db.DateTime)
+    notes = db.Column(db.String(1000))
+    created_by = db.Column(db.Integer, db.ForeignKey('user.id'))
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    property = db.relationship('RentalProperty', backref='maintenance_requests')
+    tenant = db.relationship('Tenant', backref='maintenance_requests')
+    assigned_to = db.relationship('User', foreign_keys=[assigned_to_user_id])
+
+
+class Lease(db.Model):
+    """Simple lease/agreement for tenant-property with dates and terms"""
+    id = db.Column(db.Integer, primary_key=True)
+    tenant_id = db.Column(db.Integer, db.ForeignKey('tenant.id'), nullable=False)
+    property_id = db.Column(db.Integer, db.ForeignKey('rental_property.id'), nullable=False)
+    start_date = db.Column(db.DateTime)
+    end_date = db.Column(db.DateTime)
+    rent_amount = db.Column(db.Float)
+    terms = db.Column(db.String(1000))
+    is_active = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    tenant = db.relationship('Tenant', backref='leases')
+    property = db.relationship('RentalProperty', backref='leases')
+
+
+class HeldTransaction(db.Model):
+    """Holds in-progress transactions (sales, POs, supplier invoices) so users can pause and resume later."""
+    id = db.Column(db.Integer, primary_key=True)
+    transaction_type = db.Column(db.String(30), nullable=False)  # 'sale', 'purchase_order', 'supplier_invoice'
+    data = db.Column(db.Text, nullable=False)  # JSON of current cart/lines + metadata
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'))
+    branch_id = db.Column(db.Integer, db.ForeignKey('branch.id'))
+    reference = db.Column(db.String(150))  # e.g. customer name, PO supplier, invoice no for display
+    notes = db.Column(db.Text)  # optional notes when holding
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    user = db.relationship('User')
+    branch = db.relationship('Branch')

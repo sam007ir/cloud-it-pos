@@ -10,10 +10,27 @@
   </div>
   <div class="flex gap-2">
     <a href="{{ url_for('daily_sales_summary') }}" class="px-4 py-2 bg-emerald-600 text-white rounded-2xl text-sm">Daily Sales Summary</a>
-    <a href="{{ url_for('reports', **request.args) }}&export=pdf" class="px-4 py-2 bg-red-600 text-white rounded-2xl text-sm">Export PDF</a>
-    <a href="{{ url_for('reports', **request.args) }}&export=excel" class="px-4 py-2 bg-green-600 text-white rounded-2xl text-sm">Export Excel</a>
   </div>
 </div>
+
+<form method="get" class="mb-4 flex gap-2 items-center">
+  <select name="report_type" class="border rounded-2xl px-3 py-2 text-sm">
+    <option value="summary" {% if report_type == 'summary' %}selected{% endif %}>Summary</option>
+    <option value="department" {% if report_type == 'department' %}selected{% endif %}>Department Sales Report</option>
+    <option value="product" {% if report_type == 'product' %}selected{% endif %}>Product Sales Report</option>
+    <option value="cashier" {% if report_type == 'cashier' %}selected{% endif %}>Cashier Sales Report</option>
+    <option value="tax" {% if report_type == 'tax' %}selected{% endif %}>Tax Report</option>
+    <option value="stock" {% if report_type == 'stock' %}selected{% endif %}>Stock on Hand Report</option>
+  </select>
+  <button type="submit" class="px-4 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm">Load Report</button>
+  {% if report_type and report_type != 'summary' %}
+  <a href="{{ url_for('reports', report_type=report_type, date_from=date_from, date_to=date_to) }}&export=pdf" class="px-3 py-2 bg-red-600 text-white rounded-2xl text-sm">PDF</a>
+  <a href="{{ url_for('reports', report_type=report_type, date_from=date_from, date_to=date_to) }}&export=excel" class="px-3 py-2 bg-green-600 text-white rounded-2xl text-sm">Excel</a>
+  {% else %}
+  <a href="{{ url_for('reports', **request.args) }}&export=pdf" class="px-3 py-2 bg-red-600 text-white rounded-2xl text-sm">PDF</a>
+  <a href="{{ url_for('reports', **request.args) }}&export=excel" class="px-3 py-2 bg-green-600 text-white rounded-2xl text-sm">Excel</a>
+  {% endif %}
+</form>
 
 <form method="get" class="mb-6 flex gap-3 items-end bg-white p-4 rounded-3xl border">
   <div>
@@ -77,8 +94,71 @@
 
 </div>
 
+{% if report_type == 'department' %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold mb-4">Department Sales Report</div>
+  <table class="w-full text-sm">
+    <thead><tr class="bg-slate-50"><th class="text-left p-2">Department</th><th class="text-right p-2">Total VIP</th><th class="text-right p-2">Total VEP (approx)</th><th class="text-right p-2">Qty</th></tr></thead>
+    <tbody>
+      {% for dept, vals in dept_sales.items() %}
+      <tr class="border-b"><td class="p-2">{{ dept }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(vals.total_vip) }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(vals.total_vep) }}</td><td class="text-right p-2">{{ vals.count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif report_type == 'product' %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold mb-4">Product Sales Report (Top by VIP)</div>
+  <table class="w-full text-sm">
+    <thead><tr class="bg-slate-50"><th class="text-left p-2">Product</th><th class="p-2">SKU</th><th class="text-right p-2">Total VIP</th><th class="text-right p-2">Qty Sold</th></tr></thead>
+    <tbody>
+      {% for p in (product_sales.values() | sort(attribute='total_vip', reverse=true))[:50] %}
+      <tr class="border-b"><td class="p-2">{{ p.name }}</td><td class="p-2 font-mono text-xs">{{ p.sku }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(p.total_vip) }}</td><td class="text-right p-2">{{ p.qty }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif report_type == 'cashier' %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold mb-4">Cashier / Staff Sales Report</div>
+  <table class="w-full text-sm">
+    <thead><tr class="bg-slate-50"><th class="text-left p-2">Cashier/Staff</th><th class="text-right p-2">Total VIP</th><th class="text-right p-2">Transactions</th></tr></thead>
+    <tbody>
+      {% for c, vals in cashier_sales.items() %}
+      <tr class="border-b"><td class="p-2">{{ c }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(vals.total_vip) }}</td><td class="text-right p-2">{{ vals.count }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif report_type == 'tax' %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold mb-4">Tax Report (VAT Breakdown)</div>
+  <div class="mb-2">Total VAT Collected: <strong>FJD {{ "%.2f"|format(tax_breakdown.total_vat) }}</strong></div>
+  <table class="w-full text-sm">
+    <thead><tr class="bg-slate-50"><th class="text-left p-2">Rate</th><th class="text-right p-2">Total VIP</th><th class="text-right p-2">Total VAT</th></tr></thead>
+    <tbody>
+      {% for rate, vals in tax_breakdown.by_rate.items() %}
+      <tr class="border-b"><td class="p-2">{{ rate }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(vals.vip) }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(vals.vat) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% elif report_type == 'stock' %}
+<div class="bg-white rounded-3xl border p-6 mb-6">
+  <div class="font-semibold mb-4">Stock on Hand Report</div>
+  <table class="w-full text-sm">
+    <thead><tr class="bg-slate-50"><th class="text-left p-2">Product</th><th class="p-2">SKU</th><th class="p-2">Branch</th><th class="text-right p-2">On Hand</th><th class="text-right p-2">VIP Value</th></tr></thead>
+    <tbody>
+      {% for s in stock_data %}
+      <tr class="border-b"><td class="p-2">{{ s.product }}</td><td class="p-2 font-mono text-xs">{{ s.sku }}</td><td class="p-2">{{ s.branch }}</td><td class="text-right p-2">{{ s.on_hand }}</td><td class="text-right p-2">FJD {{ "%.2f"|format(s.value_vip) }}</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+{% else %}
 <div class="mt-6 bg-white rounded-3xl border p-6">
   <div class="font-semibold mb-4">Recent Transactions (Sample)</div>
-  <div class="text-xs text-slate-500">For detailed reports, use the Sales page with filters.</div>
+  <div class="text-xs text-slate-500">For detailed reports, use the Sales page with filters or select a report type above.</div>
 </div>
+{% endif %}
 {% endblock %}

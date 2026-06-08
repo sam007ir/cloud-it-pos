@@ -34,6 +34,30 @@
   </div>
 </div>
 
+<!-- Rental KPIs -->
+<div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+  <div class="bg-emerald-50 border border-emerald-200 rounded-3xl p-5">
+    <div class="text-xs text-emerald-600">MONTHLY RENT DUE (OCCUPIED)</div>
+    <div class="text-3xl font-semibold mt-1 tabular-nums">FJD {{ "{:,.2f}".format(total_monthly_rent_due) }}</div>
+  </div>
+  <div class="bg-amber-50 border border-amber-200 rounded-3xl p-5">
+    <div class="text-xs text-amber-600">TENANTS WITH OUTSTANDING</div>
+    <div class="text-3xl font-semibold mt-1 text-amber-600">{{ overdue_tenants }}</div>
+  </div>
+  <div class="bg-blue-50 border border-blue-200 rounded-3xl p-5">
+    <div class="text-xs text-blue-600">OPEN MAINTENANCE</div>
+    <div class="text-3xl font-semibold mt-1 text-blue-600">{{ open_maintenance }}</div>
+  </div>
+  <div class="bg-white border rounded-3xl p-5">
+    <div class="text-xs text-slate-500">RECENT RENTAL PAYMENTS</div>
+    {% for pay in recent_rental_payments[:3] %}
+    <div class="text-sm tabular-nums">FJD {{ "%.2f"|format(pay.amount) }} • {{ pay.tenant.name if pay.tenant else '' }}</div>
+    {% else %}
+    <div class="text-sm text-slate-400">None yet</div>
+    {% endfor %}
+  </div>
+</div>
+
 <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
   <!-- Recent Sales -->
   <div class="lg:col-span-7 bg-white rounded-3xl border p-6">
@@ -100,8 +124,44 @@
     <a href="{{ url_for('help_guide') }}" 
        class="inline-flex items-center px-5 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl text-sm font-semibold">
       <i class="fa-solid fa-book mr-2"></i>
-      Open Help Guide
+      Open Detailed Help
+    </a>
+    <a href="/static/help/Cloud_IT_POS_How_to_Begin_Guide.pdf" target="_blank"
+       class="inline-flex items-center px-5 py-2 ml-2 border border-blue-600 text-blue-600 hover:bg-blue-50 rounded-2xl text-sm font-semibold">
+      <i class="fa-solid fa-file-pdf mr-2"></i>
+      Download "How to Begin" PDF
     </a>
   </div>
 </div>
+
+<!-- Charts section (real data) -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-6">
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-3">Sales Trend (Last 7 Days)</div>
+    <canvas id="salesChart" height="90"></canvas>
+  </div>
+  <div class="bg-white rounded-3xl border p-6">
+    <div class="font-semibold mb-3">Rent Due vs Inventory Value</div>
+    <canvas id="mixChart" height="90"></canvas>
+  </div>
+</div>
+
+<script>
+  new Chart(document.getElementById('salesChart'), {
+    type: 'line',
+    data: {
+      labels: {{ sales_labels | tojson }},
+      datasets: [{ label: 'Sales FJD', data: {{ sales_data | tojson }}, borderColor: '#0A4D68', tension: 0.3, fill: false }]
+    },
+    options: { responsive:true, plugins:{legend:{display:false}} }
+  });
+  new Chart(document.getElementById('mixChart'), {
+    type: 'doughnut',
+    data: {
+      labels: ['Monthly Rent Due', 'Inventory Value'],
+      datasets: [{ data: [{{ total_monthly_rent_due }}, {{ total_stock_value }}], backgroundColor: ['#10b981','#3b82f6'] }]
+    }
+  });
+</script>
 {% endblock %}

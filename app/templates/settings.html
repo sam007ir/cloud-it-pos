@@ -31,9 +31,13 @@
             <div class="font-semibold">{{ b.name }}</div>
             <div class="text-xs text-slate-500">{{ b.address }}</div>
             <div class="text-xs font-mono mt-1">TIN: {{ b.tin }} • UID: {{ b.vms_uid }}</div>
+            <div class="text-[10px] mt-1">
+              {% if b.vms_disabled %}<span class="px-1 bg-orange-100 text-orange-700 rounded">VMS Disabled</span>{% endif %}
+              {% if b.allow_negative_stock %}<span class="px-1 bg-red-100 text-red-700 rounded ml-1">Neg. Stock Allowed</span>{% endif %}
+            </div>
           </div>
           <div class="flex gap-1">
-            <button onclick="editBranch({{ b.id }}, '{{ b.name }}', '{{ b.address or '' }}', '{{ b.tin }}', '{{ b.vms_uid or '' }}', '{{ b.phone or '' }}')"
+            <button onclick="editBranch({{ b.id }}, '{{ b.name }}', '{{ b.address or '' }}', '{{ b.tin }}', '{{ b.vms_uid or '' }}', '{{ b.phone or '' }}', {{ 'true' if b.vms_disabled else 'false' }}, {{ 'true' if b.allow_negative_stock else 'false' }})"
                     class="px-3 py-1 text-xs border rounded-xl hover:bg-slate-50">Edit</button>
           </div>
         </div>
@@ -88,6 +92,49 @@
 
 </div>
 
+<!-- Backup & Restore Database -->
+<div class="mt-6 bg-white rounded-3xl border p-6">
+  <div class="font-semibold text-lg mb-4 flex items-center gap-x-2">
+    <i class="fa-solid fa-database"></i>
+    <span>Backup &amp; Restore Database</span>
+  </div>
+
+  <div class="text-sm text-slate-600 mb-4">
+    <strong>Important:</strong> Always create a backup before major changes. 
+    Restore will replace the currently active database file. A pre-restore backup is created automatically.
+    <span class="text-red-600">You will need to restart the application after a restore.</span>
+  </div>
+
+  <div class="flex flex-col sm:flex-row gap-3">
+    <!-- Backup -->
+    <div class="flex-1">
+      <button onclick="downloadBackup()" 
+              class="w-full px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-semibold flex items-center justify-center gap-x-2">
+        <i class="fa-solid fa-download"></i> 
+        Download Current Database Backup
+      </button>
+      <div class="text-[10px] text-slate-400 mt-1 text-center">Saves a timestamped copy locally (recommended regularly)</div>
+    </div>
+
+    <!-- Restore -->
+    <div class="flex-1">
+      <form id="restore-form" onsubmit="performRestore(event)" class="space-y-2">
+        <div class="flex items-center gap-2">
+          <input type="file" id="restore-file" accept=".db" required 
+                 class="flex-1 text-sm border rounded-2xl px-3 py-2 file:mr-3 file:py-1 file:px-3 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-slate-100 hover:file:bg-slate-200">
+          <button type="submit" 
+                  class="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-2xl text-sm font-semibold whitespace-nowrap">
+            <i class="fa-solid fa-upload mr-1"></i> Restore
+          </button>
+        </div>
+        <div class="text-[10px] text-red-500">Select a valid .db backup file to replace the current database.</div>
+      </form>
+    </div>
+  </div>
+
+  <div id="restore-status" class="mt-3 text-sm hidden"></div>
+</div>
+
 <!-- Tax Rates & Payment Methods -->
 <div class="mt-6 grid grid-cols-1 lg:grid-cols-2 gap-6">
   <!-- Tax Rates -->
@@ -113,7 +160,7 @@
         </div>
       </div>
       {% else %}
-      <div class="text-slate-400 text-sm py-2">No custom tax rates. Default 15% will be used.</div>
+      <div class="text-slate-400 text-sm py-2">No custom tax rates. Default G 12.5% will be used.</div>
       {% endfor %}
     </div>
   </div>
@@ -282,6 +329,17 @@
           <label class="block text-xs font-medium text-slate-600 mb-1">Phone</label>
           <input type="text" id="branch-phone" class="w-full border rounded-2xl px-4 py-2.5 focus:outline-none focus:border-[#0A4D68]">
         </div>
+
+        <div class="grid grid-cols-1 gap-3 pt-2">
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" id="branch-vms-disabled" class="accent-[#0A4D68]">
+            <span>Disable VMS / Fiscalization (use designer layout for all receipts)</span>
+          </label>
+          <label class="flex items-center gap-2 text-sm cursor-pointer">
+            <input type="checkbox" id="branch-allow-negative" class="accent-[#0A4D68]">
+            <span>Allow sales even if stock is 0 or negative</span>
+          </label>
+        </div>
       </div>
 
       <div class="px-6 py-4 bg-slate-50 border-t flex gap-3">
@@ -296,13 +354,12 @@
 <div class="mt-6 bg-white rounded-3xl border p-6">
   <div class="font-semibold text-lg mb-4 flex items-center justify-between">
     <span>Receipt Design (80mm or A4)</span>
-    <span class="text-xs px-3 py-1 bg-emerald-100 text-emerald-700 rounded-full">100% editable layout</span>
+    <span class="text-xs px-3 py-1 bg-violet-100 text-violet-700 rounded-full">Composer 2.5 Model</span>
   </div>
 
-  <div class="mb-4 text-sm bg-amber-50 border border-amber-200 rounded-2xl p-3">
-    <strong>Full design control:</strong> For complete layout freedom, edit the file 
-    <code class="bg-white px-1 rounded">app/templates/receipt.html</code> directly. 
-    You can change structure, add sections, styling, etc. The options below control the easy parts.
+  <div class="mb-4 text-sm bg-violet-50 border border-violet-200 rounded-2xl p-3">
+    <strong>Composer 2.5 Model enabled:</strong> Use the <strong>Visual Drag &amp; Drop Designer</strong> below for full mouse-driven control of receipt layout (fields, order, free-text notes). The saved layout now drives both WeasyPrint and FPDF PDF receipts.
+    Direct template edits in <code class="bg-white px-1 rounded">receipt.html</code> are still supported as a fallback when no composer layout is active.
   </div>
 
   <form onsubmit="saveReceiptConfig(event)">
@@ -339,9 +396,9 @@
       <a href="{{ url_for('receipt_designer') }}" 
          class="inline-flex items-center px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-2xl text-sm font-semibold">
         <i class="fa-solid fa-mouse-pointer mr-2"></i>
-        Open Visual Drag &amp; Drop Receipt Designer
+        Open Visual Drag &amp; Drop Composer 2.5
       </a>
-      <p class="text-[10px] text-slate-400 mt-1">Move any database field with your mouse. See all available fields from Order, Branch, Debtor, Fiscal, etc.</p>
+      <p class="text-[10px] text-slate-400 mt-1">Drag any DB field (Order, Branch, Debtor, Fiscal, Totals...) + Free Text notes. Layout fully controls the generated PDF receipts.</p>
     </div>
 
     <!-- Logo Upload -->
@@ -378,7 +435,7 @@
 
     <button type="submit" class="px-6 py-2 bg-[#0A4D68] text-white rounded-2xl text-sm font-semibold">Save Receipt Settings</button>
     <p class="text-[10px] text-slate-400 mt-2">
-      For 100% custom layout, colors, structure, fonts, or extra sections — edit <code>app/templates/receipt.html</code>.
+      Composer 2.5 (designer) is the recommended way. For advanced pixel-level changes beyond the palette, you can still edit <code>app/templates/receipt.html</code> (falls back when no layout saved).
     </p>
   </form>
 </div>
@@ -590,6 +647,8 @@ function showBranchModal() {
   document.getElementById('branch-modal-title').textContent = 'Add New Branch';
   document.getElementById('branch-form').reset();
   document.getElementById('branch-id').value = '';
+  document.getElementById('branch-vms-disabled').checked = false;
+  document.getElementById('branch-allow-negative').checked = false;
 }
 
 function hideBranchModal() {
@@ -604,7 +663,9 @@ async function saveBranch(e) {
     address: document.getElementById('branch-address').value,
     tin: document.getElementById('branch-tin').value,
     vms_uid: document.getElementById('branch-uid').value,
-    phone: document.getElementById('branch-phone').value
+    phone: document.getElementById('branch-phone').value,
+    vms_disabled: document.getElementById('branch-vms-disabled').checked,
+    allow_negative_stock: document.getElementById('branch-allow-negative').checked
   };
 
   let url = '/api/branches';
@@ -629,7 +690,7 @@ async function saveBranch(e) {
   }
 }
 
-function editBranch(id, name, address, tin, uid, phone) {
+function editBranch(id, name, address, tin, uid, phone, vmsDisabled, allowNegative) {
   document.getElementById('branch-modal').classList.remove('hidden');
   document.getElementById('branch-modal-title').textContent = 'Edit Branch';
   document.getElementById('branch-id').value = id;
@@ -638,6 +699,8 @@ function editBranch(id, name, address, tin, uid, phone) {
   document.getElementById('branch-tin').value = tin;
   document.getElementById('branch-uid').value = uid;
   document.getElementById('branch-phone').value = phone;
+  document.getElementById('branch-vms-disabled').checked = !!vmsDisabled;
+  document.getElementById('branch-allow-negative').checked = !!allowNegative;
 }
 
 // User functions
@@ -928,6 +991,55 @@ async function restoreDatabase(input) {
   }
 
   input.value = '';
+}
+
+// New clean Backup & Restore handlers (for the dedicated section)
+function downloadBackup() {
+  window.location.href = '/api/system/backup';
+}
+
+async function performRestore(event) {
+  event.preventDefault();
+
+  const form = document.getElementById('restore-form');
+  const fileInput = document.getElementById('restore-file');
+  const status = document.getElementById('restore-status');
+
+  if (!fileInput.files.length) {
+    alert('Please select a .db backup file');
+    return;
+  }
+
+  if (!confirm('This will replace the CURRENT active database. A pre-restore backup will be created automatically. The app must be restarted after. Proceed?')) {
+    return;
+  }
+
+  status.classList.remove('hidden');
+  status.className = 'mt-3 text-sm text-emerald-600';
+  status.textContent = 'Uploading and restoring...';
+
+  const formData = new FormData();
+  formData.append('db_file', fileInput.files[0]);
+
+  try {
+    const res = await fetch('/api/system/restore', {
+      method: 'POST',
+      body: formData
+    });
+    const data = await res.json();
+
+    if (data.success) {
+      status.className = 'mt-3 text-sm text-emerald-600 font-semibold';
+      status.textContent = data.message || 'Restore successful! Please restart the application immediately.';
+      fileInput.value = '';
+    } else {
+      status.className = 'mt-3 text-sm text-red-600';
+      status.textContent = 'Restore failed: ' + (data.message || 'Unknown error');
+    }
+  } catch (err) {
+    status.className = 'mt-3 text-sm text-red-600';
+    status.textContent = 'Restore error: ' + err.message;
+  }
 }
 </script>
 {% endblock %}

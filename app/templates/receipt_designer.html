@@ -1,19 +1,26 @@
 {% extends "base.html" %}
 
-{% block title %}Receipt Designer{% endblock %}
+{% block title %}Receipt Designer - Composer 2.5{% endblock %}
 
 {% block content %}
 <div class="max-w-7xl mx-auto">
   <div class="flex items-end justify-between mb-4">
     <div>
-      <h1 class="text-3xl font-semibold tracking-tight">Receipt Designer</h1>
-      <p class="text-slate-500">Drag fields from the palette into sections. Arrange them exactly how you want.</p>
+      <div class="flex items-center gap-3">
+        <h1 class="text-3xl font-semibold tracking-tight">Receipt Designer</h1>
+        <span class="px-2.5 py-0.5 text-[10px] font-bold tracking-wider bg-violet-600 text-white rounded-full">COMPOSER 2.5</span>
+      </div>
+      <p class="text-slate-500">Drag fields from the palette into sections. Full layout now powers real PDF receipts (WeasyPrint + FPDF fallback).</p>
     </div>
-    <div>
+    <div class="flex items-center gap-2">
       <a href="{{ url_for('settings') }}" class="px-4 py-2 border rounded-2xl text-sm">Back to Settings</a>
+      <button onclick="resetToDefaultLayout()" 
+              class="px-4 py-2 border border-slate-300 hover:bg-slate-50 rounded-2xl text-sm">Reset Defaults</button>
+      <button onclick="clearAllSections()" 
+              class="px-4 py-2 border border-red-200 text-red-600 hover:bg-red-50 rounded-2xl text-sm">Clear All</button>
       <button onclick="saveLayout()" 
-              class="ml-3 px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-semibold text-sm">
-        Save Layout
+              class="ml-1 px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl font-semibold text-sm">
+        Save Layout (2.5)
       </button>
     </div>
   </div>
@@ -22,7 +29,10 @@
     
     <!-- Field Palette -->
     <div class="lg:col-span-3 bg-white border rounded-3xl p-4">
-      <div class="font-semibold mb-3 text-sm">Available Fields (from your database)</div>
+      <div class="font-semibold mb-3 text-sm flex items-center gap-2">
+        Available Fields (from your database)
+        <span class="text-[9px] px-1.5 py-px bg-violet-100 text-violet-700 rounded">2.5</span>
+      </div>
       
       {% for group, fields in available_fields.items() %}
       <div class="mb-3">
@@ -50,7 +60,7 @@
       </div>
 
       <div class="text-[10px] text-slate-400 mt-4">
-        Tip: Drag fields into the sections. You can also drag "Free Text" to add any custom message.
+        Tip: Drag fields + Free Text / Notes. "Items" section always renders the full tax-aware table in the final PDF. Layout uses <strong>Composer 2.5</strong> model.
       </div>
     </div>
 
@@ -92,7 +102,7 @@
           <div class="flex justify-between items-center mb-2">
             <div class="font-semibold text-sm text-[#0A4D68]">ITEMS TABLE</div>
           </div>
-          <div class="text-xs text-slate-500 mb-1">Columns (drag fields here for the table):</div>
+          <div class="text-[10px] text-emerald-600 mb-1">Drag fields or notes here — the full items table will always render in receipts (Composer 2.5). Use Free Text for column notes.</div>
           <div class="droppable min-h-[50px] border border-dashed rounded-xl p-2 bg-slate-50 flex flex-wrap gap-1" 
                ondrop="dropField(event)" ondragover="allowDrop(event)" data-section="items"></div>
         </div>
@@ -129,12 +139,18 @@
 
     <!-- Live Preview -->
     <div class="lg:col-span-3 bg-white border rounded-3xl p-4">
-      <div class="font-semibold mb-3 text-sm">Live Preview (80mm style)</div>
-      <div id="preview" class="border bg-white p-2 text-xs overflow-auto" style="height: 420px; font-size: 8.5pt; line-height: 1.2;" 
-       data-receipt-layout='{{ current_layout | tojson | safe }}'>
-        <!-- Preview will be rendered by JS -->
+      <div class="flex items-center justify-between mb-2">
+        <div class="font-semibold text-sm">Live Preview</div>
+        <div class="flex items-center text-[10px] rounded-xl border overflow-hidden">
+          <button id="pv-80" onclick="setPreviewMode('80mm')" class="px-2 py-0.5 bg-emerald-600 text-white">80mm</button>
+          <button id="pv-a4" onclick="setPreviewMode('a4')" class="px-2 py-0.5 hover:bg-slate-100">A4</button>
+        </div>
       </div>
-      <div class="text-[10px] text-center text-slate-400 mt-2">This updates as you drag fields</div>
+      <div id="preview" class="border bg-white p-2 text-xs overflow-auto" style="height: 420px; font-size: 8pt; line-height: 1.15; font-family: 'Segoe UI', Arial, sans-serif;"
+       data-receipt-layout='{{ current_layout | tojson | safe }}'>
+        <!-- Preview will be rendered by JS (Composer 2.5 fidelity) -->
+      </div>
+      <div class="text-[10px] text-center text-slate-400 mt-2">Matches real PDF output • drag to rearrange</div>
     </div>
 
   </div>
@@ -231,82 +247,166 @@ function getCurrentLayout() {
   return layout;
 }
 
+let previewMode = '80mm';
+
+function setPreviewMode(mode) {
+  previewMode = mode;
+  document.getElementById('pv-80').className = (mode === '80mm') ? 'px-2 py-0.5 bg-emerald-600 text-white' : 'px-2 py-0.5 hover:bg-slate-100';
+  document.getElementById('pv-a4').className = (mode === 'a4') ? 'px-2 py-0.5 bg-emerald-600 text-white' : 'px-2 py-0.5 hover:bg-slate-100';
+  updatePreview();
+}
+
+function getSampleValue(key, label) {
+  // Realistic sample values for live preview (Composer 2.5)
+  const map = {
+    'order.id': '48291',
+    'receipt_number': '48291',
+    'order.created_at': '15 Oct 2026 14:33',
+    'date_time': '15 Oct 2026 14:33',
+    'order.payment_method': 'CASH',
+    'order.payment_ref': '',
+    'order.subtotal': '142.60',
+    'subtotal_vep': '142.60',
+    'order.vat': '21.39',
+    'vat_amount': '21.39',
+    'order.total': '163.99',
+    'total_vip': '163.99',
+    'order.customer_name': 'John Kumar',
+    'order.customer_tin': '12-3456789',
+    'branch.name': 'Main Suva Store',
+    'seller.name': 'Main Suva Store',
+    'branch.tin': '10-1234567',
+    'seller.tin': '10-1234567',
+    'branch.vms_uid': 'VMS-1002291',
+    'seller.vms_uid': 'VMS-1002291',
+    'branch.address': '45 Victoria Parade, Suva',
+    'branch.phone': '331 1234',
+    'debtor.name': 'John Kumar',
+    'customer.name': 'John Kumar',
+    'debtor.tin': '12-3456789',
+    'debtor.phone': '998 1122',
+    'debtor.address': 'Lot 12, Kings Rd, Nausori',
+    'debtor.outstanding_balance': '245.00',
+    'fiscal.sdc_no': 'SDC-20261015-0048291',
+    'fiscal.invoice_no': 'INV-48291',
+    'fiscal.sdc_time': '2026-10-15T14:33:41',
+    'fiscal.signature': 'A3F9...B2C1 (signed)',
+    'fiscal.verification_url': 'https://vms.frcs.org.fj/verify/48291',
+    'config.company_name': 'Your Business Name',
+    'company.name': 'Your Business Name',
+    'config.header_text': 'Quality goods • Best prices',
+    'config.footer_text': 'Thank you for shopping with us!',
+    'item_count': '7'
+  };
+  if (map[key]) return map[key];
+  if (key.includes('total') || key.includes('subtotal') || key.includes('vat')) return '163.99';
+  return label || key.split('.').pop();
+}
+
 function updatePreview() {
   const preview = document.getElementById('preview');
   const layout = getCurrentLayout();
+  const isA4 = previewMode === 'a4';
 
-  let html = `<div style="font-family: monospace; line-height:1.3">`;
+  let w = isA4 ? '210mm' : '80mm';
+  let fs = isA4 ? '9.5pt' : '7.8pt';
+  let pad = isA4 ? '6px' : '3px';
 
-  // Header
-  html += `<div style="border-bottom:1px solid #000; padding-bottom:4px; margin-bottom:6px; text-align:center">`;
-  (layout.header || []).forEach(item => {
-    if (item.type === 'freetext') {
-      html += `<div style="color:#444;">${item.text}</div>`;
-    } else {
-      html += `<div>${item.label}</div>`;
-    }
-  });
+  let html = `<div style="width:${w}; margin:0 auto; background:#fff; color:#111; font-family:'Segoe UI',Arial,sans-serif; font-size:${fs}; line-height:1.22; padding:${pad}; border:1px solid #ddd; box-shadow:0 1px 3px rgba(0,0,0,.06);">`;
+
+  // Header section (or default banner)
+  const headerItems = layout.header || [];
+  html += `<div style="border-bottom:1px solid #000; padding-bottom:3px; margin-bottom:5px; text-align:center;">`;
+  if (headerItems.length) {
+    headerItems.forEach(item => {
+      if (item.type === 'freetext') {
+        html += `<div style="color:#444;">${item.text}</div>`;
+      } else {
+        const val = getSampleValue(item.key, item.label);
+        html += `<div><strong>${item.label}</strong>: ${val}</div>`;
+      }
+    });
+  } else {
+    html += `<div style="font-weight:700;">CLOUD IT POS</div><div style="font-size:8.5pt;">TAX INVOICE / RECEIPT</div>`;
+  }
   html += `</div>`;
 
   // Seller
-  if (layout.seller && layout.seller.length) {
-    html += `<div style="margin-bottom:4px"><strong>SELLER</strong><br>`;
-    layout.seller.forEach(item => {
+  const seller = layout.seller || [];
+  if (seller.length) {
+    html += `<div style="margin-bottom:3px;"><strong style="font-size:8pt;border-bottom:1px dotted #555;">SELLER / BRANCH</strong><br>`;
+    seller.forEach(item => {
       if (item.type === 'freetext') html += `${item.text}<br>`;
-      else html += `${item.label}<br>`;
+      else html += `${item.label}: <strong>${getSampleValue(item.key, item.label)}</strong><br>`;
     });
     html += `</div>`;
   }
 
   // Customer
-  if (layout.customer && layout.customer.length) {
-    html += `<div style="margin-bottom:4px"><strong>CUSTOMER</strong><br>`;
-    layout.customer.forEach(item => {
+  const cust = layout.customer || [];
+  if (cust.length) {
+    html += `<div style="margin-bottom:3px;"><strong style="font-size:8pt;border-bottom:1px dotted #555;">CUSTOMER / DEBTOR</strong><br>`;
+    cust.forEach(item => {
       if (item.type === 'freetext') html += `${item.text}<br>`;
-      else html += `${item.label}<br>`;
+      else html += `${item.label}: <strong>${getSampleValue(item.key, item.label)}</strong><br>`;
     });
     html += `</div>`;
   }
 
-  // Items
-  html += `<div style="margin:6px 0"><strong>ITEMS</strong><br>`;
-  if (layout.items && layout.items.length) {
-    html += layout.items.map(item => item.type === 'freetext' ? item.text : item.label).join(' | ') + '<br>';
+  // Items (always show nice table representation when section present)
+  const itms = layout.items || [];
+  html += `<div style="margin:4px 0 2px;"><strong style="font-size:8pt;border-bottom:1px dotted #555;">ITEMS</strong>`;
+  if (itms.length) {
+    itms.forEach(item => {
+      if (item.type === 'freetext') html += `<div style="font-size:7.5pt;color:#444;">${item.text}</div>`;
+      else html += `<div style="font-size:7pt;">${item.label}: ${getSampleValue(item.key, item.label)}</div>`;
+    });
+  }
+  // Mini table preview
+  html += `<table style="width:100%; border-collapse:collapse; font-size:7pt; margin-top:2px;">
+    <tr style="border-bottom:1px solid #000;"><th style="text-align:left;">Item</th><th style="text-align:center;">Qty</th><th style="text-align:right;">VIP</th><th style="text-align:right;">Total</th></tr>
+    <tr><td>Product A</td><td style="text-align:center;">2</td><td style="text-align:right;">12.50</td><td style="text-align:right;">25.00</td></tr>
+    <tr><td>Product B (taxable)</td><td style="text-align:center;">1</td><td style="text-align:right;">138.49</td><td style="text-align:right;">138.99</td></tr>
+  </table></div>`;
+
+  // Totals
+  const tots = layout.totals || [];
+  html += `<div style="border-top:1px solid #000; padding-top:2px; margin-top:3px; font-size:8pt;">`;
+  if (tots.length) {
+    tots.forEach(item => {
+      if (item.type === 'freetext') html += `${item.text}<br>`;
+      else {
+        const v = getSampleValue(item.key, item.label);
+        html += `${item.label}: <strong>${v}</strong><br>`;
+      }
+    });
   } else {
-    html += 'product_name × qty @ price = total<br>';
+    html += `Subtotal (VEP): <strong>142.60</strong><br>Tax: <strong>21.39</strong><br><span style="font-weight:700;">TOTAL (VIP): 163.99</span>`;
   }
   html += `</div>`;
 
-  // Totals
-  if (layout.totals && layout.totals.length) {
-    html += `<div style="border-top:1px solid #000; padding-top:3px; margin-top:4px">`;
-    layout.totals.forEach(item => {
-      if (item.type === 'freetext') html += `${item.text}<br>`;
-      else html += `${item.label}<br>`;
-    });
-    html += `</div>`;
-  } else {
-    html += `<div style="border-top:1px solid #000; padding-top:3px; margin-top:4px">Subtotal • Tax • Total</div>`;
-  }
-
   // Fiscal
-  if (layout.fiscal && layout.fiscal.length) {
-    html += `<div style="margin-top:6px; border-top:1px dashed #000; padding-top:4px; font-size:7pt">`;
-    layout.fiscal.forEach(item => {
+  const fisc = layout.fiscal || [];
+  if (fisc.length) {
+    html += `<div style="margin-top:5px; border-top:1px dashed #000; padding-top:3px; font-size:6.5pt;">`;
+    fisc.forEach(item => {
       if (item.type === 'freetext') html += `${item.text}<br>`;
-      else html += `${item.label}<br>`;
+      else html += `${item.label}: ${getSampleValue(item.key, item.label)}<br>`;
     });
     html += `</div>`;
   }
 
   // Footer
-  if (layout.footer && layout.footer.length) {
-    html += `<div style="margin-top:8px; font-size:7pt; text-align:center">`;
-    layout.footer.forEach(item => {
+  const foot = layout.footer || [];
+  if (foot.length) {
+    html += `<div style="margin-top:6px; font-size:6.5pt; text-align:center; border-top:1px dotted #555; padding-top:2px;">`;
+    foot.forEach(item => {
       if (item.type === 'freetext') html += `${item.text}<br>`;
-      else html += `${item.label}<br>`;
+      else html += `${item.label}: ${getSampleValue(item.key, item.label)}<br>`;
     });
     html += `</div>`;
+  } else {
+    html += `<div style="margin-top:6px; font-size:6.5pt; text-align:center; color:#666;">Thank you • Cloud IT POS</div>`;
   }
 
   html += `</div>`;
@@ -315,6 +415,9 @@ function updatePreview() {
 
 async function saveLayout() {
   const layout = getCurrentLayout();
+  // Stamp Composer 2.5 version metadata
+  layout._version = "2.5";
+  layout._updated = new Date().toISOString();
   
   const res = await fetch('/api/receipt-layout', {
     method: 'POST',
@@ -324,10 +427,82 @@ async function saveLayout() {
   
   const data = await res.json();
   if (data.success) {
-    alert('Receipt layout saved! Future receipts will use this design.');
+    alert('Composer 2.5 layout saved! All future PDF receipts (WeasyPrint + FPDF) will use this design.');
   } else {
     alert('Failed to save layout');
   }
+}
+
+function clearAllSections() {
+  document.querySelectorAll('.droppable').forEach(d => d.innerHTML = '');
+  updatePreview();
+}
+
+function resetToDefaultLayout() {
+  // A sensible "2.5 default" layout that most users will want
+  const defaults = {
+    "_version": "2.5",
+    "header": [
+      { "key": "config.company_name", "label": "Company Name" },
+      { "key": "config.header_text", "label": "Header Text" }
+    ],
+    "seller": [
+      { "key": "branch.name", "label": "Branch Name" },
+      { "key": "branch.tin", "label": "Branch TIN" },
+      { "key": "branch.vms_uid", "label": "VMS UID" }
+    ],
+    "customer": [
+      { "key": "order.customer_name", "label": "Customer Name" },
+      { "key": "order.customer_tin", "label": "Customer TIN" }
+    ],
+    "items": [
+      { "type": "freetext", "text": "All prices shown are VIP (tax-inclusive)" }
+    ],
+    "totals": [
+      { "key": "order.subtotal", "label": "Subtotal (VEP)" },
+      { "key": "order.vat", "label": "Tax / VAT" },
+      { "key": "order.total", "label": "Total (VIP)" }
+    ],
+    "fiscal": [
+      { "key": "fiscal.sdc_no", "label": "SDC No" },
+      { "key": "fiscal.signature", "label": "Signature" }
+    ],
+    "footer": [
+      { "type": "freetext", "text": "Thank you for your business!" }
+    ]
+  };
+
+  // Clear current
+  document.querySelectorAll('.droppable').forEach(d => d.innerHTML = '');
+
+  // Populate
+  Object.keys(defaults).forEach(section => {
+    if (section.startsWith('_')) return;
+    const container = document.querySelector(`[data-section="${section}"] .droppable`);
+    if (!container) return;
+    defaults[section].forEach(item => {
+      const fieldEl = document.createElement('div');
+      fieldEl.className = 'inline-flex items-center gap-1 bg-white border rounded-lg px-2 py-0.5 text-xs mr-1 mb-1 cursor-move shadow-sm group';
+      if (item.type === 'freetext') {
+        fieldEl.dataset.type = 'freetext';
+        fieldEl.dataset.text = item.text || 'Custom text';
+        fieldEl.innerHTML = `
+          <span class="font-medium text-purple-700" contenteditable="true" onblur="updateFreeText(this)">${item.text || 'Custom text'}</span>
+          <button onclick="this.parentElement.remove(); updatePreview()" class="ml-1 text-red-400 hover:text-red-600">×</button>
+        `;
+      } else {
+        fieldEl.innerHTML = `
+          <span class="font-medium">${item.label}</span>
+          <span class="text-[9px] text-slate-400">(${item.key})</span>
+          <button onclick="this.parentElement.remove(); updatePreview()" class="ml-1 text-red-400 hover:text-red-600">×</button>
+        `;
+        fieldEl.dataset.key = item.key;
+        fieldEl.dataset.label = item.label;
+      }
+      container.appendChild(fieldEl);
+    });
+  });
+  updatePreview();
 }
 
 // Load existing layout on page load
@@ -337,10 +512,19 @@ function loadExistingLayout() {
 
   try {
     const saved = JSON.parse(preview.dataset.receiptLayout || '{}');
-    if (Object.keys(saved).length === 0) return;
+    if (Object.keys(saved).length === 0) {
+      // If nothing saved yet, auto-load a nice 2.5 starter for first-time users
+      setTimeout(() => {
+        // Only if canvas is empty
+        const any = document.querySelector('.droppable > div');
+        if (!any) resetToDefaultLayout();
+      }, 120);
+      return;
+    }
 
     // Rebuild the canvas from saved layout
     Object.keys(saved).forEach(section => {
+      if (section.startsWith('_')) return;
       const container = document.querySelector(`[data-section="${section}"] .droppable`);
       if (!container) return;
 
@@ -374,6 +558,8 @@ function loadExistingLayout() {
 window.onload = function() {
   initDroppables();
   loadExistingLayout();
+  // Default preview mode
+  setPreviewMode('80mm');
   updatePreview();
 };
 </script>

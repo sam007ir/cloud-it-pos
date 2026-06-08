@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+
+{% block title %}Rental History{% endblock %}
+
+{% block content %}
+<h1 class="text-3xl font-semibold mb-6">Rental History</h1>
+
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+  <div class="bg-white border rounded-3xl p-6">
+    <div class="font-semibold mb-3">Recent Charges</div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-xs text-slate-500"><th>Date</th><th>Tenant / Property</th><th class="text-right">Amount</th><th>Status</th></tr></thead>
+      <tbody>
+        {% for c in charges %}
+        <tr class="border-t">
+          <td class="py-1">{{ c.charge_date.strftime('%Y-%m-%d') if c.charge_date else '' }}</td>
+          <td>{{ c.tenant.name if c.tenant else '' }} / {{ c.property.name if c.property else '' }}</td>
+          <td class="text-right tabular-nums">FJD {{ "%.2f"|format(c.amount) }}</td>
+          <td><span class="text-xs px-2 py-0.5 rounded bg-amber-100 text-amber-700">{{ c.status }}</span></td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center py-4 text-slate-400">No charges yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="bg-white border rounded-3xl p-6">
+    <div class="font-semibold mb-3">Recent Payments Received</div>
+    <table class="w-full text-sm">
+      <thead><tr class="text-left text-xs text-slate-500"><th>Date</th><th>Tenant / Property</th><th>Method</th><th class="text-right">Amount</th></tr></thead>
+      <tbody>
+        {% for p in payments %}
+        <tr class="border-t">
+          <td class="py-1">{{ p.payment_date.strftime('%Y-%m-%d') if p.payment_date else '' }}</td>
+          <td>{{ p.tenant.name if p.tenant else '' }} {% if p.property %}/ {{ p.property.name }}{% endif %}</td>
+          <td class="text-xs">{{ p.payment_method or '' }}</td>
+          <td class="text-right tabular-nums">FJD {{ "%.2f"|format(p.amount) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" class="text-center py-4 text-slate-400">No payments recorded yet. Use Rent Collection to record them.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div class="mt-4 text-xs text-slate-500">Balances on tenants and properties are updated live from the Rent Collection screen (scan barcode → add charge or payment → complete).</div>
+{% endblock %}

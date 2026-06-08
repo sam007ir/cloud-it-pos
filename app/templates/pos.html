@@ -36,6 +36,8 @@
     <a href="{{ url_for('certificates') }}" class="px-4 py-2 text-xs border rounded-2xl flex items-center gap-x-2 hover:bg-white">
       <i class="fa-solid fa-certificate"></i> Manage Certificates
     </a>
+    <button onclick="holdCurrentSale()" class="px-4 py-2 text-xs border border-amber-500 text-amber-700 rounded-2xl hover:bg-amber-50">Hold Sale</button>
+    <button onclick="showHeldSalesModal()" class="px-4 py-2 text-xs border rounded-2xl hover:bg-white">Held Sales</button>
     <button onclick="clearSale()" class="px-5 py-2 text-xs border rounded-2xl hover:bg-white">Clear Sale</button>
   </div>
 </div>
@@ -50,10 +52,13 @@
       {% for p in products %}
       <div class="pos-product flex justify-between items-center p-3 border rounded-2xl hover:bg-emerald-50 cursor-pointer" 
            data-name="{{ p.name|lower }}" data-sku="{{ p.sku|lower }}" data-barcode="{{ p.barcode or '' }}"
-           onclick="addToSale({{ p.id }}, '{{ p.name }}', {{ p.price }}, '{{ p.sku }}', {{ p.tax_rate.rate if p.tax_rate else 15 }})">
+           onclick="addToSale({{ p.id }}, '{{ p.name }}', {{ p.price }}, '{{ p.sku }}', {{ p.tax_rate.rate if p.tax_rate else 12.5 }})">
         <div class="min-w-0">
           <div class="font-medium text-sm truncate">{{ p.name }}</div>
           <div class="text-xs text-slate-500 font-mono">{{ p.sku }} • {{ p.barcode or 'No barcode' }}</div>
+          <div class="text-[10px] mt-0.5 font-medium {{ 'text-red-600' if p.on_hand == 0 else 'text-emerald-600' }}">
+            {{ p.on_hand|default(0) }} on hand
+          </div>
           {% if p.tax_rate %}
             <div class="text-[10px] mt-0.5">
               <span class="px-1.5 py-px bg-blue-100 text-blue-700 rounded">{{ p.tax_rate.label }} {{ p.tax_rate.rate }}%</span>
@@ -81,7 +86,7 @@
     <div class="pt-4 border-t mt-auto">
       <div class="space-y-1 text-sm mb-4">
         <div class="flex justify-between text-slate-600">
-          <span>Subtotal (ex-VAT)</span>
+          <span>Total VEP (ex-VAT)</span>
           <span id="sale-sub" class="tabular-nums">FJD 0.00</span>
         </div>
         <div class="flex justify-between text-slate-600">
@@ -89,7 +94,7 @@
           <span id="sale-vat" class="tabular-nums">FJD 0.00</span>
         </div>
         <div class="flex justify-between font-bold text-xl pt-2 border-t">
-          <span>Total (inc-VAT)</span>
+          <span>Total VIP (inc-VAT)</span>
           <span id="sale-total" class="tabular-nums">FJD 0.00</span>
         </div>
       </div>
@@ -141,7 +146,13 @@
           <button onclick="completeSale('CARD')" class="py-3 bg-slate-800 hover:bg-black text-white rounded-2xl font-semibold text-sm">CARD</button>
         {% endif %}
       </div>
-      <div class="text-[10px] text-center text-emerald-600 mt-2 font-medium">Every sale is digitally signed &amp; sent to FRCS VMS</div>
+      <div class="mb-2 flex items-center gap-2">
+        <label class="flex items-center gap-2 text-sm cursor-pointer select-none">
+          <input type="checkbox" id="return-mode" onchange="toggleReturnMode()" class="accent-red-600">
+          <span class="font-medium text-red-600">Return / Credit Note Mode (Sales Return)</span>
+        </label>
+      </div>
+      <div class="text-[10px] text-center text-emerald-600 mt-2 font-medium">When VMS is enabled sales are fiscalized. Designer receipt layout (from Receipt Designer) is used for printing. Use Return Mode for customer returns &amp; credit notes.</div>
     </div>
   </div>
 </div>
@@ -181,6 +192,53 @@
               class="flex-1 py-3 bg-[#0A4D68] text-white rounded-2xl font-semibold">
         Print Receipt
       </button>
+    </div>
+  </div>
+</div>
+
+<!-- Held Sales Modal -->
+<div id="held-sales-modal" class="hidden fixed inset-0 bg-black/70 z-[140] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-lg rounded-3xl shadow-xl overflow-hidden">
+    <div class="px-6 py-4 border-b flex items-center justify-between bg-slate-50">
+      <div class="font-semibold">Held Sales</div>
+      <button onclick="hideHeldSalesModal()" class="text-slate-400 hover:text-slate-600 text-xl">&times;</button>
+    </div>
+
+    <div class="p-4 max-h-[420px] overflow-auto" id="held-sales-list">
+      <!-- Populated by JS -->
+    </div>
+
+    <div class="p-4 border-t bg-slate-50 flex gap-2">
+      <button onclick="hideHeldSalesModal()" class="flex-1 py-2.5 border rounded-2xl">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Receipt Layout Chooser Modal (after sale complete) -->
+<div id="layout-chooser-modal" class="hidden fixed inset-0 bg-black/70 z-[150] flex items-center justify-center p-4">
+  <div class="bg-white w-full max-w-md rounded-3xl shadow-xl overflow-hidden">
+    <div class="px-6 py-4 border-b bg-slate-50 flex justify-between items-center">
+      <div class="font-semibold">Choose Receipt Layout to Print</div>
+      <button onclick="hideLayoutChooser()" class="text-xl leading-none text-slate-400 hover:text-slate-600">&times;</button>
+    </div>
+
+    <div class="p-6 space-y-3">
+      <button onclick="printWithLayout('designer_80mm')" class="w-full py-3 border-2 border-[#0A4D68] hover:bg-[#0A4D68] hover:text-white rounded-2xl text-sm font-semibold transition">
+        Designer Layout - 80mm Thermal
+      </button>
+      <button onclick="printWithLayout('designer_a4')" class="w-full py-3 border-2 border-[#0A4D68] hover:bg-[#0A4D68] hover:text-white rounded-2xl text-sm font-semibold transition">
+        Designer Layout - A4
+      </button>
+      <button onclick="printWithLayout('standard_80mm')" class="w-full py-3 border border-slate-300 hover:bg-slate-50 rounded-2xl text-sm font-semibold transition">
+        Basic 80mm (no designer)
+      </button>
+      <button onclick="printWithLayout('standard_a4')" class="w-full py-3 border border-slate-300 hover:bg-slate-50 rounded-2xl text-sm font-semibold transition">
+        Basic A4 (no designer)
+      </button>
+    </div>
+
+    <div class="px-6 py-4 bg-slate-50 border-t text-xs text-slate-500">
+      Designer layouts come from Settings → Receipt Designer (Composer 2.5). Use those for your custom receipt look on every sale (even when VMS/fiscal is enabled). Basic = static fallback.
     </div>
   </div>
 </div>
@@ -276,12 +334,12 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-function addToSale(id, name, price, sku, taxRate = 15) {
+function addToSale(id, name, price, sku, taxRate = 12.5) {
   const existing = currentSale.findIndex(i => i.id === id);
   if (existing >= 0) {
     currentSale[existing].qty++;
   } else {
-    currentSale.push({id, name, price, sku, qty: 1, taxRate: taxRate || 15});
+    currentSale.push({id, name, price, sku, qty: 1, taxRate: taxRate || 12.5});
   }
   recalculateSpecialPricing();
 }
@@ -334,7 +392,7 @@ function renderSale() {
   // Calculate using per-item tax rates (much more accurate for mixed tax items)
   let totalVatIncluded = 0;
   currentSale.forEach(item => {
-    const rate = (item.taxRate || 15) / 100;
+    const rate = (item.taxRate || 12.5) / 100;
     const lineVip = (specialPricingMap[item.id] ? specialPricingMap[item.id].adjusted_price : item.price) * item.qty;
     const lineVep = lineVip / (1 + rate);
     totalVatIncluded += (lineVip - lineVep);
@@ -390,7 +448,7 @@ function updateTotals(vipTotal, vatIncluded = null) {
   // vipTotal = final amount customer pays (tax inclusive)
   // vatIncluded = the tax portion already included in the vipTotal
   // Note: Real per-line tax uses the rate assigned to each product (see backend).
-  const rate = 0.15;
+  const rate = 0.125;
   if (vatIncluded === null) {
     vatIncluded = vipTotal * rate / (1 + rate);
   }
@@ -445,12 +503,166 @@ function clearSale() {
   renderSale();
 }
 
+async function holdCurrentSale() {
+  if (currentSale.length === 0) {
+    return alert("No items to hold");
+  }
+  const notes = prompt("Notes for this held sale (optional):", "") || "";
+  const debtorSelect = document.getElementById('debtor-select');
+  const payload = {
+    type: 'sale',
+    reference: document.getElementById('customer-name')?.value || (debtorSelect && debtorSelect.value ? 'Debtor Sale' : 'Walk-in'),
+    notes: notes,
+    data: {
+      items: currentSale,
+      debtor_id: debtorSelect && debtorSelect.value ? parseInt(debtorSelect.value) : null,
+      customer_name: document.getElementById('customer-name')?.value || '',
+      customer_tin: document.getElementById('customer-tin')?.value || '',
+      branch_id: currentBranchId
+    }
+  };
+
+  const res = await fetch('/api/held-transactions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('Sale held successfully');
+    currentSale = [];
+    renderSale();
+    // clear customer fields
+    if (document.getElementById('customer-name')) document.getElementById('customer-name').value = '';
+    if (document.getElementById('customer-tin')) document.getElementById('customer-tin').value = '';
+    if (debtorSelect) debtorSelect.value = '';
+  } else {
+    showToast(data.message || 'Failed to hold sale', 'error');
+  }
+}
+
+async function showHeldSalesModal() {
+  const modal = document.getElementById('held-sales-modal');
+  const listEl = document.getElementById('held-sales-list');
+  listEl.innerHTML = '<div class="p-4 text-center text-slate-500">Loading held sales...</div>';
+  modal.classList.remove('hidden');
+
+  try {
+    const res = await fetch('/api/held-transactions?type=sale');
+    const data = await res.json();
+
+    if (!data.held || data.held.length === 0) {
+      listEl.innerHTML = '<div class="p-8 text-center text-slate-400">No held sales</div>';
+      return;
+    }
+
+    let html = '';
+    data.held.forEach(h => {
+      const itemsCount = (h.data.items || []).length;
+      const when = h.updated_at ? new Date(h.updated_at).toLocaleString() : '';
+      const notesHtml = h.notes ? `<div class="text-[10px] text-amber-600 mt-1">Note: ${h.notes}</div>` : '';
+      html += `
+        <div class="border rounded-2xl p-3 mb-2 flex justify-between items-center hover:bg-slate-50">
+          <div>
+            <div class="font-medium">${h.reference || 'Held Sale'} <span class="text-xs text-slate-500">(${itemsCount} items)</span></div>
+            <div class="text-[10px] text-slate-400">${when}</div>
+            ${notesHtml}
+          </div>
+          <div class="flex gap-2">
+            <button onclick="recallHeldSale(${h.id}); hideHeldSalesModal();" 
+                    class="px-3 py-1 text-xs bg-[#0A4D68] text-white rounded-xl">Recall</button>
+            <button onclick="deleteHeld(${h.id}, this); event.stopImmediatePropagation();" 
+                    class="px-2 py-1 text-xs border text-red-600 rounded-xl">×</button>
+          </div>
+        </div>`;
+    });
+    listEl.innerHTML = html;
+  } catch (e) {
+    listEl.innerHTML = '<div class="p-4 text-red-500">Error loading held sales</div>';
+  }
+}
+
+function hideHeldSalesModal() {
+  document.getElementById('held-sales-modal').classList.add('hidden');
+}
+
+async function recallHeldSale(heldId) {
+  const res = await fetch(`/api/held-transactions/${heldId}/recall`, { method: 'POST' });
+  const data = await res.json();
+
+  if (data.success && data.type === 'sale' && data.data) {
+    const d = data.data;
+    currentSale = d.items || [];
+    currentBranchId = d.branch_id || currentBranchId;
+
+    // restore customer/debtor
+    if (d.customer_name && document.getElementById('customer-name')) {
+      document.getElementById('customer-name').value = d.customer_name;
+    }
+    if (d.customer_tin && document.getElementById('customer-tin')) {
+      document.getElementById('customer-tin').value = d.customer_tin;
+    }
+    const debtorSel = document.getElementById('debtor-select');
+    if (debtorSel && d.debtor_id) {
+      debtorSel.value = d.debtor_id;
+      // trigger the info update if the function exists
+      if (typeof selectDebtor === 'function') selectDebtor(debtorSel);
+    }
+
+    renderSale();
+    showToast('Held sale recalled');
+  } else {
+    showToast('Failed to recall held sale', 'error');
+  }
+}
+
+async function deleteHeld(heldId, btnEl) {
+  if (!confirm('Delete this held sale?')) return;
+  const res = await fetch(`/api/held-transactions/${heldId}`, { method: 'DELETE' });
+  const data = await res.json();
+  if (data.success) {
+    // remove from DOM
+    if (btnEl && btnEl.parentElement && btnEl.parentElement.parentElement) {
+      btnEl.parentElement.parentElement.remove();
+    }
+  }
+}
+
+function toggleReturnMode() {
+  const chk = document.getElementById('return-mode');
+  const paySection = document.getElementById('payment-buttons');
+  if (!paySection) return;
+
+  if (chk && chk.checked) {
+    paySection.querySelectorAll('button').forEach(btn => {
+      btn.textContent = btn.textContent.includes('CASH') || btn.textContent.includes('CARD') ? 
+        'PROCESS RETURN / CREDIT NOTE' : btn.textContent.replace('CASH','RETURN').replace('CARD','RETURN');
+      btn.classList.add('!bg-red-600', '!hover:bg-red-700');
+    });
+  } else {
+    // reset texts (simple reload of labels or hardcode)
+    location.reload(); // easiest to reset labels for now
+  }
+}
+
 async function completeSale(method) {
   if (currentSale.length === 0) return alert("Add items to the sale first");
 
   const debtorSelect = document.getElementById('debtor-select');
   const amountReceivedInput = document.getElementById('amount-received');
   const tendered = amountReceivedInput && amountReceivedInput.value ? parseFloat(amountReceivedInput.value) : null;
+
+  const isReturn = document.getElementById('return-mode') && document.getElementById('return-mode').checked;
+
+  let managerPassword = null;
+  if (isReturn) {
+    // Require manager password for returns/credit notes (cashiers not allowed without approval)
+    managerPassword = prompt("Manager password required for Sales Return / Credit Note:", "");
+    if (!managerPassword) {
+      return alert("Manager password is required to process returns.");
+    }
+  }
 
   const payload = {
     branch_id: currentBranchId,
@@ -466,7 +678,9 @@ async function completeSale(method) {
     customer_tin: document.getElementById('customer-tin').value,
     debtor_id: debtorSelect && debtorSelect.value ? parseInt(debtorSelect.value) : null,
     payment_method: method,
-    tendered_amount: tendered   // for change calculation
+    tendered_amount: tendered,   // for change calculation
+    is_return: isReturn,
+    manager_password: managerPassword
   };
 
   const res = await fetch('/api/pos/create-sale', {
@@ -477,12 +691,25 @@ async function completeSale(method) {
   const data = await res.json();
 
   if (data.success) {
-    // Show Change Due screen first if applicable
+    // Only show the "Fiscal Invoice Issued" branded modal when we actually got a fiscal record (VMS not disabled)
+    const hasFiscal = !!(data.fiscal);
     if (data.change_due !== undefined && data.change_due > 0) {
       showChangeDueScreen(data.change_due, data);
-    } else {
+    } else if (hasFiscal) {
       showFiscalSuccess(data);
+    } else {
+      // Demo / VMS-disabled branch: no fiscal invoice at all. Just neutral success + layout chooser.
+      showToast('Sale completed (demo / non-fiscal)');
     }
+
+    // After success, always offer the layout chooser (Designer 80mm/A4 from your Receipt Designer, or Basic)
+    // This ensures Print uses the designed layout, never the old/weird hardcoded one.
+    if (data.order_id) {
+      setTimeout(() => {
+        showLayoutChooser(data.order_id);
+      }, 450);
+    }
+
     currentSale = [];
     renderSale();
     if (amountReceivedInput) amountReceivedInput.value = '';
@@ -499,6 +726,10 @@ function showFiscalSuccess(data) {
   const f = data.fiscal || {};
   const orderId = data.order_id;
 
+  // Default the direct receipt link to the Designer layout (80mm). This prevents "weird layout" on click.
+  // User can still pick other options from the chooser that also appears.
+  const designerReceiptUrl = `/receipt/pdf/${orderId}?layout=80mm&designer=1`;
+
   content.innerHTML = `
     <div class="space-y-3 text-sm">
       <div><span class="font-semibold">SDC Invoice No:</span> <span class="font-mono">${f.sdc_no || f.invoice_no}</span></div>
@@ -509,9 +740,9 @@ function showFiscalSuccess(data) {
       </div>
     </div>
     <div class="mt-4">
-      <a href="/receipt/pdf/${orderId}" target="_blank"
+      <a href="${designerReceiptUrl}" target="_blank"
          class="block text-center w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-2xl text-sm font-semibold">
-        Download Official FRCS PDF Receipt
+        Download Receipt (Designer Layout)
       </a>
     </div>
   `;
@@ -524,7 +755,15 @@ function closeFiscalModal() {
 }
 
 function printFiscal() {
-  window.print();
+  // Do NOT use window.print() on the modal (that produces the weird box layout).
+  // Instead open the proper PDF receipt using the saved Designer layout by default.
+  const modal = document.getElementById('fiscal-modal');
+  const oid = (modal && modal.dataset.orderId) || (lastCompletedOrderId);
+  if (oid) {
+    window.open(`/receipt/pdf/${oid}?layout=80mm&designer=1`, '_blank');
+  } else {
+    window.print();
+  }
 }
 
 // ===== Change Due Screen =====
@@ -539,18 +778,62 @@ function showChangeDueScreen(changeDue, saleData) {
 
 function closeChangeModal() {
   document.getElementById('change-modal').classList.add('hidden');
-  // Show the normal fiscal success after closing change screen
+  // After change screen, show fiscal success ONLY if we have fiscal data (skip for demo/disabled VMS)
   if (lastSaleDataForReceipt) {
-    showFiscalSuccess(lastSaleDataForReceipt);
+    const hasF = !!(lastSaleDataForReceipt.fiscal);
+    if (hasF) {
+      showFiscalSuccess(lastSaleDataForReceipt);
+    } else {
+      showToast('Sale completed (demo / non-fiscal)');
+      // still ensure chooser is available
+      if (lastSaleDataForReceipt.order_id) {
+        setTimeout(() => showLayoutChooser(lastSaleDataForReceipt.order_id), 200);
+      }
+    }
     lastSaleDataForReceipt = null;
   }
 }
 
 function printReceiptFromChange() {
   if (lastSaleDataForReceipt && lastSaleDataForReceipt.order_id) {
-    window.open(`/receipt/pdf/${lastSaleDataForReceipt.order_id}`, '_blank');
+    // Always prefer the Designer layout from Receipt Designer for the printed receipt (80mm default).
+    // This fixes the "weird layout" when pressing Print.
+    const url = `/receipt/pdf/${lastSaleDataForReceipt.order_id}?layout=80mm&designer=1`;
+    window.open(url, '_blank');
   }
   closeChangeModal();
 }
+
+// Layout chooser after successful sale
+let lastCompletedOrderId = null;
+
+function showLayoutChooser(orderId) {
+  lastCompletedOrderId = orderId;
+  document.getElementById('layout-chooser-modal').classList.remove('hidden');
+}
+
+function hideLayoutChooser() {
+  document.getElementById('layout-chooser-modal').classList.add('hidden');
+  lastCompletedOrderId = null;
+}
+
+function printWithLayout(layoutKey) {
+  if (!lastCompletedOrderId) return;
+  let url = `/receipt/pdf/${lastCompletedOrderId}`;
+  if (layoutKey === 'designer_80mm') {
+    url += '?layout=80mm&designer=1';
+  } else if (layoutKey === 'designer_a4') {
+    url += '?layout=a4&designer=1';
+  } else if (layoutKey === 'standard_80mm') {
+    url += '?layout=80mm';
+  } else if (layoutKey === 'standard_a4') {
+    url += '?layout=a4';
+  }
+  window.open(url, '_blank');
+  hideLayoutChooser();
+}
+
+// Override success to show layout chooser instead of auto-print
+// (we still show fiscal success, but printing is now manual choice)
 </script>
 {% endblock %}

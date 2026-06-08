@@ -11,11 +11,25 @@
   <div class="w-full max-w-2xl px-6">
     <!-- Header -->
     <div class="text-center mb-8">
+      {% if current_database %}
+      <div class="mb-3">
+        <span class="inline-flex items-center gap-x-2 px-4 py-1 bg-slate-800 text-emerald-400 text-xs font-mono rounded-2xl border border-slate-700">
+          <i class="fa-solid fa-database"></i>
+          <span class="font-semibold">{{ current_database }}</span>
+        </span>
+      </div>
+      {% endif %}
       <div class="inline-flex items-center justify-center w-16 h-16 bg-white rounded-3xl mb-4 shadow-xl">
         <i class="fa-solid fa-receipt text-4xl text-[#0A4D68]"></i>
       </div>
       <h1 class="text-white text-3xl font-semibold tracking-tighter">Welcome to Cloud IT POS</h1>
       <p class="text-slate-400 mt-2">This is a fresh installation. Let's set up your system.</p>
+      <div class="mt-3">
+        <a href="{{ url_for('choose_database') }}" class="inline-flex items-center gap-x-2 px-4 py-2 text-sm bg-slate-100 hover:bg-slate-200 text-[#0A4D68] rounded-2xl border border-slate-200">
+          <i class="fa-solid fa-database"></i>
+          <span>Switch or create a different database</span>
+        </a>
+      </div>
     </div>
 
     <div class="bg-white rounded-3xl shadow-2xl p-8">

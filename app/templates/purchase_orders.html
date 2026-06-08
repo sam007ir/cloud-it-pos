@@ -59,6 +59,17 @@
   </table>
 </div>
 
+<!-- Held / Draft POs -->
+<div class="mt-8">
+  <div class="flex items-center justify-between mb-3">
+    <div class="font-semibold text-sm">Held / Draft Purchase Orders</div>
+    <button onclick="loadHeldPOs()" class="text-xs px-3 py-1 border rounded-xl">Refresh</button>
+  </div>
+  <div id="held-po-list" class="bg-white rounded-3xl border p-3 text-sm">
+    <!-- loaded via JS -->
+  </div>
+</div>
+
 <!-- PO Creation Modal with real line items -->
 <div id="po-modal" class="hidden fixed inset-0 bg-black/60 z-[160] flex items-center justify-center">
   <div class="bg-white w-full max-w-2xl rounded-3xl p-6">
@@ -79,12 +90,46 @@
       </div>
     </div>
 
+    <!-- Search to quickly add products to this PO (replaces hunting in long dropdowns) -->
+    <div class="mb-3 relative">
+      <label class="text-xs font-semibold text-slate-500">Quick add product (search)</label>
+      <input id="po-product-search" type="text" class="w-full border rounded-2xl px-4 py-2 text-sm" 
+             placeholder="Type name, SKU or barcode to find &amp; add item..." 
+             oninput="searchPOProducts(this)">
+      <div id="po-product-results" class="hidden absolute left-0 right-0 mt-1 max-h-64 overflow-auto bg-white border rounded-2xl shadow z-50 text-sm"></div>
+    </div>
+
     <div class="mb-2 font-semibold text-sm">Items</div>
-    <div id="po-items-container" class="space-y-2 mb-3"></div>
+
+    <table class="w-full text-sm mb-3">
+      <thead>
+        <tr class="bg-slate-100 text-[10px] font-semibold text-slate-600">
+          <th class="text-left px-2 py-1.5">Product</th>
+          <th class="px-1 py-1.5 w-16 text-center">Qty</th>
+          <th class="px-1 py-1.5 w-24 text-right">Cost VEP</th>
+          <th class="px-1 py-1.5 w-24 text-right">Cost VIP</th>
+          <th class="px-1 py-1.5 w-24 text-right">Total VEP</th>
+          <th class="px-1 py-1.5 w-24 text-right">Total VIP</th>
+          <th class="px-1 py-1.5 w-20 text-right">Tax</th>
+          <th class="w-8"></th>
+        </tr>
+      </thead>
+      <tbody id="po-items-tbody" class="text-sm"></tbody>
+    </table>
+
     <button onclick="addPOItemRow()" class="text-sm px-3 py-1 border rounded-xl mb-4">+ Add Item</button>
+
+    <div class="flex justify-end text-sm mb-4">
+      <div class="text-right">
+        <div>PO Total VEP: <span id="po-total-vep" class="font-semibold tabular-nums">0.00</span></div>
+        <div>PO Total VIP: <span id="po-total-vip" class="font-semibold tabular-nums">0.00</span></div>
+        <div class="text-xs text-slate-500">Tax: <span id="po-total-tax" class="tabular-nums">0.00</span></div>
+      </div>
+    </div>
 
     <div class="flex gap-2">
       <button onclick="hidePOModal()" class="flex-1 py-2.5 border rounded-2xl">Cancel</button>
+      <button onclick="holdCurrentPO()" class="flex-1 py-2.5 border border-amber-500 text-amber-700 rounded-2xl">Hold as Draft</button>
       <button onclick="savePurchaseOrder()" class="flex-1 py-2.5 bg-[#0A4D68] text-white rounded-2xl font-semibold">Create Purchase Order</button>
     </div>
   </div>
@@ -95,7 +140,8 @@ let poItemRows = 0;
 
 function showPOModal() {
   document.getElementById('po-modal').classList.remove('hidden');
-  document.getElementById('po-items-container').innerHTML = '';
+  const tbody = document.getElementById('po-items-tbody');
+  if (tbody) tbody.innerHTML = '';
   poItemRows = 0;
   addPOItemRow(); // start with one row
 }
@@ -104,23 +150,182 @@ function hidePOModal() {
   document.getElementById('po-modal').classList.add('hidden');
 }
 
-function addPOItemRow() {
-  const container = document.getElementById('po-items-container');
-  const rowId = ++poItemRows;
-  const div = document.createElement('div');
-  div.className = 'flex gap-2 items-center po-item-row';
-  div.innerHTML = `
-    <select class="po-product border rounded-xl px-3 py-2 text-sm flex-1">
-      {% for p in products %}<option value="{{p.id}}" data-tax-rate="{{ p.tax_rate.rate if p.tax_rate else 15 }}">{{p.name}} ({{p.sku}})</option>{% endfor %}
-    </select>
-    <input type="number" value="1" class="po-qty w-16 border rounded-xl px-2 py-1.5 text-sm" placeholder="Qty">
-    <div class="flex gap-1">
-      <input type="number" step="0.01" value="0" class="po-cost-vep w-20 border rounded-xl px-2 py-1.5 text-sm" placeholder="VEP" onchange="syncPOVipFromVep(this)">
-      <input type="number" step="0.01" value="0" class="po-cost-vip w-20 border rounded-xl px-2 py-1.5 text-sm" placeholder="VIP" onchange="syncPOVepFromVip(this)">
-    </div>
-    <button type="button" onclick="this.parentElement.remove()" class="text-red-500 px-2">×</button>
+function addPOItemRow(prefillProduct = null) {
+  const tbody = document.getElementById('po-items-tbody');
+  if (!tbody) return;
+
+  const row = document.createElement('tr');
+  row.className = 'po-item-row border-b';
+
+  row.innerHTML = `
+    <td class="px-1 py-1">
+      <select class="po-product w-full border rounded-lg px-2 py-1 text-sm" onchange="recalcPORow(this)">
+        {% for p in products %}<option value="{{p.id}}" data-tax-rate="{{ p.tax_rate.rate if p.tax_rate else 12.5 }}">{{p.name}} ({{p.sku}})</option>{% endfor %}
+      </select>
+    </td>
+    <td class="px-1 py-1">
+      <input type="number" value="1" min="1" class="po-qty w-full border rounded-lg px-2 py-1 text-sm text-center" oninput="recalcPORow(this)">
+    </td>
+    <td class="px-1 py-1">
+      <input type="number" step="0.01" value="0" class="po-cost-vep w-full border rounded-lg px-2 py-1 text-sm text-right" placeholder="VEP" oninput="syncPOVipFromVep(this); recalcPORow(this)">
+    </td>
+    <td class="px-1 py-1">
+      <input type="number" step="0.01" value="0" class="po-cost-vip w-full border rounded-lg px-2 py-1 text-sm text-right" placeholder="VIP" oninput="syncPOVepFromVip(this); recalcPORow(this)">
+    </td>
+    <td class="px-1 py-1 text-right">
+      <div class="po-line-vep font-mono tabular-nums text-sm">0.00</div>
+    </td>
+    <td class="px-1 py-1 text-right">
+      <div class="po-line-vip font-mono tabular-nums text-sm">0.00</div>
+    </td>
+    <td class="px-1 py-1 text-right">
+      <div class="po-line-tax font-mono tabular-nums text-sm text-red-600">0.00</div>
+    </td>
+    <td class="px-1 py-1 text-center">
+      <button type="button" onclick="removePORow(this)" class="text-red-500 text-lg leading-none">×</button>
+    </td>
   `;
-  container.appendChild(div);
+  tbody.appendChild(row);
+
+  // If prefill, select the product in the new row's select
+  if (prefillProduct && prefillProduct.id) {
+    setTimeout(() => {
+      const sel = row.querySelector('.po-product');
+      if (sel) {
+        sel.value = prefillProduct.id;
+        // Try to set a reasonable starting cost from pack_cost if available
+        const vepInput = row.querySelector('.po-cost-vep');
+        if (vepInput && prefillProduct.pack_cost) {
+          vepInput.value = (prefillProduct.pack_cost || 0).toFixed(2);
+        }
+        recalcPORow(sel);
+      }
+    }, 20);
+  } else {
+    // Initial calc
+    setTimeout(() => recalcPORow(row), 10);
+  }
+}
+
+function searchPOProducts(inputEl) {
+  const resultsBox = document.getElementById('po-product-results');
+  if (!inputEl || !resultsBox) return;
+  const q = inputEl.value.trim();
+  if (!q) {
+    resultsBox.classList.add('hidden');
+    return;
+  }
+  fetch(`/api/products/search?q=${encodeURIComponent(q)}&limit=12`)
+    .then(r => r.json())
+    .then(data => {
+      if (!data.results || data.results.length === 0) {
+        resultsBox.innerHTML = `<div class="p-2 text-xs text-slate-500">No matches</div>`;
+        resultsBox.classList.remove('hidden');
+        return;
+      }
+      let html = '';
+      data.results.forEach(p => {
+        html += `<div class="px-3 py-1 hover:bg-slate-100 cursor-pointer text-sm" data-id="${p.id}">
+          ${p.name} <span class="text-xs text-slate-500">(${p.sku})</span>
+          <span class="text-[10px] text-emerald-600 ml-1">${p.pack_size || 1} ${p.pack_unit || 'pcs'}</span>
+        </div>`;
+      });
+      resultsBox.innerHTML = html;
+      resultsBox.classList.remove('hidden');
+
+      resultsBox.querySelectorAll('div[data-id]').forEach(el => {
+        el.onclick = () => {
+          const pid = parseInt(el.dataset.id);
+          const prod = data.results.find(x => x.id == pid);
+          resultsBox.classList.add('hidden');
+          inputEl.value = '';
+          // Add a new row pre-selected with this product
+          addPOItemRow(prod || {id: pid});
+        };
+      });
+    })
+    .catch(() => { resultsBox.classList.add('hidden'); });
+}
+
+function removePORow(btn) {
+  const row = btn.closest('.po-item-row');
+  if (row) row.remove();
+  updatePOTotals();
+}
+
+function getTaxRateForRow(row) {
+  const select = row.querySelector('.po-product');
+  if (!select) return 0.125;
+  const opt = select.options[select.selectedIndex];
+  const rate = parseFloat(opt ? opt.dataset.taxRate : 12.5) || 12.5;
+  return rate / 100;
+}
+
+function syncPOVipFromVep(input) {
+  const row = input.closest('.po-item-row');
+  if (!row) return;
+  const vep = parseFloat(input.value) || 0;
+  const rate = getTaxRateForRow(row);
+  const vipInput = row.querySelector('.po-cost-vip');
+  if (vipInput) {
+    vipInput.value = (vep * (1 + rate)).toFixed(2);
+  }
+}
+
+function syncPOVepFromVip(input) {
+  const row = input.closest('.po-item-row');
+  if (!row) return;
+  const vip = parseFloat(input.value) || 0;
+  const rate = getTaxRateForRow(row);
+  const vepInput = row.querySelector('.po-cost-vep');
+  if (vepInput) {
+    vepInput.value = (vip / (1 + rate)).toFixed(2);
+  }
+}
+
+function recalcPORow(el) {
+  const row = el.closest ? el.closest('.po-item-row') : el;
+  if (!row) return;
+
+  const qty = parseFloat(row.querySelector('.po-qty').value) || 0;
+  const costVep = parseFloat(row.querySelector('.po-cost-vep').value) || 0;
+  const costVip = parseFloat(row.querySelector('.po-cost-vip').value) || 0;
+
+  const lineVep = costVep * qty;
+  const lineVip = costVip * qty;
+  const tax = lineVip - lineVep;
+
+  const vepEl = row.querySelector('.po-line-vep');
+  const vipEl = row.querySelector('.po-line-vip');
+  const taxEl = row.querySelector('.po-line-tax');
+
+  if (vepEl) vepEl.textContent = lineVep.toFixed(2);
+  if (vipEl) vipEl.textContent = lineVip.toFixed(2);
+  if (taxEl) taxEl.textContent = tax.toFixed(2);
+
+  updatePOTotals();
+}
+
+function updatePOTotals() {
+  let totalVep = 0;
+  let totalVip = 0;
+
+  document.querySelectorAll('.po-item-row').forEach(row => {
+    const vepText = row.querySelector('.po-line-vep')?.textContent || '0';
+    const vipText = row.querySelector('.po-line-vip')?.textContent || '0';
+    totalVep += parseFloat(vepText) || 0;
+    totalVip += parseFloat(vipText) || 0;
+  });
+
+  const tax = totalVip - totalVep;
+
+  const vepEl = document.getElementById('po-total-vep');
+  const vipEl = document.getElementById('po-total-vip');
+  const taxEl = document.getElementById('po-total-tax');
+
+  if (vepEl) vepEl.textContent = totalVep.toFixed(2);
+  if (vipEl) vipEl.textContent = totalVip.toFixed(2);
+  if (taxEl) taxEl.textContent = tax.toFixed(2);
 }
 
 async function savePurchaseOrder() {
@@ -170,8 +375,146 @@ async function savePurchaseOrder() {
   }
 }
 
+async function holdCurrentPO() {
+  const supplierId = document.getElementById('po-supplier').value;
+  const branchId = document.getElementById('po-branch').value;
+
+  const items = [];
+  document.querySelectorAll('.po-item-row').forEach(row => {
+    const productSelect = row.querySelector('.po-product');
+    const productId = productSelect.value;
+    const qty = parseInt(row.querySelector('.po-qty').value) || 0;
+    const costVep = parseFloat(row.querySelector('.po-cost-vep').value) || 0;
+    const costVip = parseFloat(row.querySelector('.po-cost-vip').value) || 0;
+    if (productId && qty > 0) {
+      items.push({ 
+        product_id: parseInt(productId), 
+        quantity: qty, 
+        cost_vep: costVep, 
+        cost_vip: costVip 
+      });
+    }
+  });
+
+  if (items.length === 0) {
+    return alert("Add at least one item before holding the PO.");
+  }
+
+  const supplierSelect = document.getElementById('po-supplier');
+  const ref = supplierSelect ? supplierSelect.options[supplierSelect.selectedIndex].text : 'PO Draft';
+  const notes = prompt("Notes for this held PO (optional):", "") || "";
+
+  const payload = {
+    type: 'purchase_order',
+    reference: ref,
+    notes: notes,
+    data: {
+      supplier_id: parseInt(supplierId),
+      branch_id: parseInt(branchId),
+      items: items
+    }
+  };
+
+  const res = await fetch('/api/held-transactions', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(payload)
+  });
+  const data = await res.json();
+
+  if (data.success) {
+    showToast('PO held as draft');
+    hidePOModal();
+    location.reload();
+  } else {
+    showToast(data.message || 'Failed to hold PO', 'error');
+  }
+}
+
+// Support continuing a held PO (called from held list)
+function prefillPOModalFromHeld(heldData) {
+  const modal = document.getElementById('po-modal');
+  if (!modal) return;
+
+  document.getElementById('po-supplier').value = heldData.supplier_id || '';
+  if (heldData.branch_id) document.getElementById('po-branch').value = heldData.branch_id;
+
+  const tbody = document.getElementById('po-items-tbody');
+  if (tbody) tbody.innerHTML = '';
+  poItemRows = 0;
+
+  if (heldData.items && heldData.items.length > 0) {
+    heldData.items.forEach(it => addPOItemRow(it));
+  } else {
+    addPOItemRow();
+  }
+
+  modal.classList.remove('hidden');
+}
+
 // === RECEIVE GOODS ===
 let currentPOId = null;
+
+async function loadHeldPOs() {
+  const container = document.getElementById('held-po-list');
+  if (!container) return;
+  container.innerHTML = '<div class="text-xs text-slate-400 p-2">Loading drafts...</div>';
+
+  try {
+    const res = await fetch('/api/held-transactions?type=purchase_order');
+    const data = await res.json();
+
+    if (!data.held || data.held.length === 0) {
+      container.innerHTML = '<div class="text-xs text-slate-400 p-2">No held purchase orders</div>';
+      return;
+    }
+
+    let html = '';
+    data.held.forEach(h => {
+      const d = h.data || {};
+      const itemCount = (d.items || []).length;
+      const notesHtml = h.notes ? `<div class="text-[10px] text-amber-600">Note: ${h.notes}</div>` : '';
+      html += `
+        <div class="flex items-center justify-between border-b py-2 last:border-b-0">
+          <div>
+            <span class="font-medium">${h.reference || 'Draft PO'}</span>
+            <span class="text-[10px] text-slate-400 ml-2">(${itemCount} items)</span>
+            ${notesHtml}
+          </div>
+          <div>
+            <button onclick="continueHeldPO(${h.id})" class="text-xs px-3 py-1 bg-amber-600 text-white rounded-xl">Continue</button>
+            <button onclick="deleteHeldPO(${h.id}, this)" class="text-xs px-2 py-1 text-red-500">×</button>
+          </div>
+        </div>`;
+    });
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div class="text-xs text-red-500 p-2">Failed to load held POs</div>';
+  }
+}
+
+async function continueHeldPO(heldId) {
+  const res = await fetch(`/api/held-transactions/${heldId}/recall`, { method: 'POST' });
+  const data = await res.json();
+  if (data.success && data.type === 'purchase_order' && data.data) {
+    prefillPOModalFromHeld(data.data);
+  } else {
+    alert('Failed to load draft');
+  }
+}
+
+async function deleteHeldPO(heldId, el) {
+  if (!confirm('Delete this draft?')) return;
+  await fetch(`/api/held-transactions/${heldId}`, { method: 'DELETE' });
+  if (el && el.parentElement) el.parentElement.parentElement.remove();
+}
+
+// Auto load held POs when the page loads
+document.addEventListener('DOMContentLoaded', function() {
+  if (document.getElementById('held-po-list')) {
+    loadHeldPOs();
+  }
+});
 
 async function showReceiveModal(poId) {
   currentPOId = poId;
